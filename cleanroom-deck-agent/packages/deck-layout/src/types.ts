@@ -18,11 +18,11 @@ export interface ResolvedTextContent {
 }
 
 export interface ResolvedTextStyle {
-  readonly fontFamily?: string;
-  readonly fontWeight?: number;
-  readonly fontStyle?: "normal" | "italic";
+  readonly fontFamily: string;
+  readonly fontWeight: number;
+  readonly fontStyle: "normal" | "italic";
   readonly fontSize: number;
-  readonly color?: string;
+  readonly color: string;
   readonly bold: boolean;
   readonly alignment: "left" | "center" | "right" | "justify";
   readonly wrap: ResolvedTextWrap;
@@ -49,8 +49,8 @@ export interface ResolvedShapeContent {
 }
 
 export interface ResolvedShapeStyle {
-  readonly fill?: string;
-  readonly stroke?: string;
+  readonly fill: string | null;
+  readonly stroke: string | null;
   readonly radius: number;
 }
 
@@ -67,7 +67,7 @@ export interface ResolvedLineContent {
 }
 
 export interface ResolvedLineStyle {
-  readonly stroke?: string;
+  readonly stroke: string;
   readonly width: number;
   readonly dash: "solid" | "dash" | "dot";
   readonly arrow: "none" | "start" | "end" | "both";
@@ -121,10 +121,68 @@ export interface ResolvedSplitLayout {
     ratio: number;
     margin: number;
     gap: number;
+    titleHeight: number;
   }>;
 }
 
-export type ResolvedLayout = ResolvedFreeLayout | ResolvedSplitLayout;
+export interface ResolvedCoverLayout {
+  readonly type: "cover";
+  readonly options: Readonly<{
+    margin: number;
+    gap: number;
+    titleHeight: number;
+    bodyHeight: number;
+  }>;
+}
+
+export interface ResolvedTitleBodyLayout {
+  readonly type: "title-body";
+  readonly options: Readonly<{
+    margin: number;
+    gap: number;
+    titleHeight: number;
+  }>;
+}
+
+export interface ResolvedTwoColumnLayout {
+  readonly type: "two-column";
+  readonly options: Readonly<{
+    margin: number;
+    gap: number;
+    titleHeight: number;
+    columnTitleHeight: number;
+  }>;
+}
+
+export interface ResolvedMetricGridLayout {
+  readonly type: "metric-grid";
+  readonly options: Readonly<{
+    columns: number;
+    rows: number;
+    margin: number;
+    gap: number;
+    titleHeight: number;
+  }>;
+}
+
+export interface ResolvedFullImageLayout {
+  readonly type: "full-image";
+  readonly options: Readonly<{
+    margin: number;
+    gap: number;
+    titleHeight: number;
+    bodyHeight: number;
+  }>;
+}
+
+export type ResolvedLayout =
+  | ResolvedFreeLayout
+  | ResolvedCoverLayout
+  | ResolvedTitleBodyLayout
+  | ResolvedSplitLayout
+  | ResolvedTwoColumnLayout
+  | ResolvedMetricGridLayout
+  | ResolvedFullImageLayout;
 
 export interface ResolvedPageBackground {
   readonly color: string;
@@ -134,7 +192,7 @@ export interface ResolvedPage {
   readonly id: string;
   readonly type: string;
   readonly layout: ResolvedLayout;
-  readonly background?: ResolvedPageBackground;
+  readonly background: ResolvedPageBackground;
   readonly elements: readonly ResolvedElement[];
 }
 

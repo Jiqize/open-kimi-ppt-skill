@@ -208,15 +208,9 @@ class SlideElementRenderer implements ResolvedElementRenderer<Promise<void>> {
       fit: textFit(element.style.wrap.overflow),
       margin: 0,
       isTextBox: true,
-      ...(element.style.fontFamily === undefined
-        ? {}
-        : { fontFace: element.style.fontFamily }),
-      ...(element.style.fontStyle === undefined
-        ? {}
-        : { italic: element.style.fontStyle === "italic" }),
-      ...(element.style.color === undefined
-        ? {}
-        : { color: pptxColor(element.style.color) }),
+      fontFace: element.style.fontFamily,
+      italic: element.style.fontStyle === "italic",
+      color: pptxColor(element.style.color),
     });
   }
 
@@ -264,11 +258,11 @@ class SlideElementRenderer implements ResolvedElementRenderer<Promise<void>> {
       w: element.w,
       h: element.h,
       fill:
-        element.style.fill === undefined
+        element.style.fill === null
           ? { type: "none" }
           : { color: pptxColor(element.style.fill) },
       line:
-        element.style.stroke === undefined
+        element.style.stroke === null
           ? { type: "none" }
           : { color: pptxColor(element.style.stroke) },
       ...(rounded ? { rectRadius: element.style.radius } : {}),
@@ -292,9 +286,7 @@ class SlideElementRenderer implements ResolvedElementRenderer<Promise<void>> {
       flipH: deltaX < 0,
       flipV: deltaY < 0,
       line: {
-        ...(element.style.stroke === undefined
-          ? {}
-          : { color: pptxColor(element.style.stroke) }),
+        color: pptxColor(element.style.stroke),
         width: element.style.width,
         dashType:
           element.style.dash === "dot" ? "sysDot" : element.style.dash,
@@ -330,9 +322,7 @@ export class PptxRenderer {
 
     for (const page of deck.pages) {
       const slide = pptx.addSlide();
-      if (page.background !== undefined) {
-        slide.background = { color: pptxColor(page.background.color) };
-      }
+      slide.background = { color: pptxColor(page.background.color) };
       const elementRenderer = new SlideElementRenderer(
         pptx,
         slide,

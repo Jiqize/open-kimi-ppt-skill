@@ -133,18 +133,18 @@ describe("resolveDeck", () => {
       {
         "elements": [
           {
-            "h": 4,
+            "h": 1,
             "id": "title",
             "w": 4.5,
             "x": 1,
             "y": 1,
           },
           {
-            "h": 4,
+            "h": 2.5,
             "id": "hero",
             "w": 3,
             "x": 6,
-            "y": 1,
+            "y": 2.5,
           },
         ],
         "layout": {
@@ -152,6 +152,7 @@ describe("resolveDeck", () => {
             "gap": 0.5,
             "margin": 1,
             "ratio": 0.6,
+            "titleHeight": 1,
           },
           "type": "split",
         },
@@ -348,7 +349,7 @@ describe("resolveDeck", () => {
     {
       name: "unsupported layout",
       expectedCode: "LAYOUT_UNSUPPORTED",
-      layout: { type: "cover" },
+      layout: { type: "not-a-built-in-layout" },
       placement: { slot: "title" },
     },
   ])("returns a typed error for $name", ({ expectedCode, layout, placement }) => {

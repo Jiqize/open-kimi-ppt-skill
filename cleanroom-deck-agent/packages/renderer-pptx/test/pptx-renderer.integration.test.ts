@@ -123,6 +123,7 @@ describe("Task 07 PPTX renderer integration", () => {
           id: "reverse-page",
           type: "line-test",
           layout: { type: "free", options: {} },
+          background: { color: "#FFFFFF" },
           elements: [
             {
               id: "reverse-line",
@@ -173,6 +174,7 @@ describe("Task 07 PPTX renderer integration", () => {
           id: "remote-page",
           type: "image-test",
           layout: { type: "free", options: {} },
+          background: { color: "#FFFFFF" },
           elements: [
             {
               id: "remote-image",

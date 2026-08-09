@@ -121,6 +121,7 @@ describe("basic resolved elements", () => {
       style: {
         fontFamily: "Arial",
         fontWeight: 700,
+        fontStyle: "normal",
         fontSize: 30,
         color: "#161616",
         bold: false,
@@ -188,11 +189,62 @@ describe("basic resolved elements", () => {
     expect(resolved).toMatchObject({
       type: "text",
       style: {
+        fontFamily: "Arial",
+        fontWeight: 400,
+        fontStyle: "normal",
         fontSize: 18,
+        color: "#161616",
         bold: false,
         alignment: "left",
         wrap: { mode: "word", overflow: "clip" },
       },
+    });
+  });
+
+  it("resolves renderer-facing visual defaults explicitly", () => {
+    const page = resolveDeck(
+      projectWithElements([
+        {
+          id: "plain-shape",
+          type: "shape",
+          x: 1,
+          y: 1,
+          w: 2,
+          h: 1,
+          shape: { kind: "rectangle" },
+        },
+        {
+          id: "plain-line",
+          type: "line",
+          x: 1,
+          y: 3,
+          w: 2,
+          h: 1,
+          line: {
+            start: { x: 0, y: 0 },
+            end: { x: 1, y: 1 },
+          },
+        },
+      ]),
+    ).pages[0];
+
+    expect(page).toMatchObject({
+      background: { color: "#FFFFFF" },
+      elements: [
+        {
+          id: "plain-shape",
+          style: { fill: null, stroke: null, radius: 0 },
+        },
+        {
+          id: "plain-line",
+          style: {
+            stroke: "#161616",
+            width: 1,
+            dash: "solid",
+            arrow: "none",
+          },
+        },
+      ],
     });
   });
 

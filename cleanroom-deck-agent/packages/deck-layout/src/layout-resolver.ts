@@ -8,6 +8,12 @@ import type {
   FontToken,
 } from "@deck-agent/deck-schema";
 
+import {
+  createSlotResolutionState,
+  normalizeLayout,
+  resolveLayoutSlot,
+  type SlotResolutionState,
+} from "./built-in-layouts.js";
 import { LayoutResolutionError } from "./errors.js";
 import type {
   ResolvedBounds,
@@ -19,107 +25,10 @@ import type {
 
 const BOUNDS_EPSILON = 1e-9;
 const DEFAULT_TEXT_FONT_SIZE = 18;
-const SPLIT_OPTION_NAMES = new Set(["ratio", "margin", "gap"]);
-
-function invalidLayoutOptions(
-  page: DeckPage,
-  message: string,
-  details?: Readonly<Record<string, unknown>>,
-): never {
-  throw new LayoutResolutionError("LAYOUT_OPTIONS_INVALID", message, {
-    pageId: page.id,
-    layoutType: page.layout.type,
-    ...(details === undefined ? {} : { details }),
-  });
-}
-
-function finiteNumberOption(
-  page: DeckPage,
-  options: Readonly<Record<string, unknown>>,
-  name: string,
-  fallback: number,
-): number {
-  const value = options[name] ?? fallback;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return invalidLayoutOptions(
-      page,
-      `Layout option must be a finite number: ${name}`,
-      { option: name, value },
-    );
-  }
-  return value;
-}
-
-function normalizeLayout(page: DeckPage): ResolvedLayout {
-  const rawOptions = page.layout.options ?? {};
-
-  if (page.layout.type === "free") {
-    if (page.layout.ratio !== undefined || Object.keys(rawOptions).length > 0) {
-      return invalidLayoutOptions(
-        page,
-        "The free layout does not accept layout options",
-      );
-    }
-    return { type: "free", options: {} };
-  }
-
-  if (page.layout.type !== "split") {
-    throw new LayoutResolutionError(
-      "LAYOUT_UNSUPPORTED",
-      `Unsupported layout: ${page.layout.type}`,
-      { pageId: page.id, layoutType: page.layout.type },
-    );
-  }
-
-  const unknownOptions = Object.keys(rawOptions).filter(
-    (name) => !SPLIT_OPTION_NAMES.has(name),
-  );
-  if (unknownOptions.length > 0) {
-    return invalidLayoutOptions(page, "Split layout has unknown options", {
-      unknownOptions,
-    });
-  }
-
-  if (
-    rawOptions.ratio !== undefined &&
-    page.layout.ratio !== undefined &&
-    rawOptions.ratio !== page.layout.ratio
-  ) {
-    return invalidLayoutOptions(
-      page,
-      "layout.ratio conflicts with layout.options.ratio",
-      {
-        legacyRatio: page.layout.ratio,
-        optionsRatio: rawOptions.ratio,
-      },
-    );
-  }
-
-  const optionsWithLegacyRatio =
-    rawOptions.ratio === undefined && page.layout.ratio !== undefined
-      ? { ...rawOptions, ratio: page.layout.ratio }
-      : rawOptions;
-  const ratio = finiteNumberOption(page, optionsWithLegacyRatio, "ratio", 0.5);
-  const margin = finiteNumberOption(page, rawOptions, "margin", 0);
-  const gap = finiteNumberOption(page, rawOptions, "gap", 0);
-
-  if (ratio <= 0 || ratio >= 1) {
-    return invalidLayoutOptions(
-      page,
-      "Split ratio must be greater than 0 and less than 1",
-      { ratio },
-    );
-  }
-  if (margin < 0 || gap < 0) {
-    return invalidLayoutOptions(
-      page,
-      "Split margin and gap must be non-negative",
-      { margin, gap },
-    );
-  }
-
-  return { type: "split", options: { ratio, margin, gap } };
-}
+const DEFAULT_FONT_FAMILY = "Arial";
+const DEFAULT_FONT_WEIGHT = 400;
+const DEFAULT_FOREGROUND_COLOR = "#000000";
+const DEFAULT_BACKGROUND_COLOR = "#FFFFFF";
 
 function resolveColorToken(
   theme: DeckTheme | undefined,
@@ -163,6 +72,14 @@ function resolveFontToken(
     );
   }
   return value;
+}
+
+function resolvedForegroundColor(theme: DeckTheme | undefined): string {
+  return theme?.colors.foreground ?? DEFAULT_FOREGROUND_COLOR;
+}
+
+function resolvedBackgroundColor(theme: DeckTheme | undefined): string {
+  return theme?.colors.background ?? DEFAULT_BACKGROUND_COLOR;
 }
 
 function resolveRadiusToken(
@@ -236,15 +153,15 @@ function resolveElementModel(
 ): ResolvedElement {
   switch (element.type) {
     case "text": {
-      let font: FontToken | undefined;
-      if (element.text.style !== undefined) {
-        font = resolveFontToken(
-          theme,
-          element.text.style,
-          page,
-          element.id,
-        );
-      }
+      const font: FontToken | undefined =
+        element.text.style === undefined
+          ? theme?.fonts.body
+          : resolveFontToken(
+              theme,
+              element.text.style,
+              page,
+              element.id,
+            );
 
       return {
         id: element.id,
@@ -252,27 +169,22 @@ function resolveElementModel(
         ...bounds,
         content: { value: element.text.value },
         style: {
-          ...(font === undefined
-            ? {}
-            : {
-                fontFamily: font.family,
-                fontWeight: font.weight,
-                ...(font.style === undefined
-                  ? {}
-                  : { fontStyle: font.style }),
-              }),
+          fontFamily: font?.family ?? DEFAULT_FONT_FAMILY,
+          fontWeight: font?.weight ?? DEFAULT_FONT_WEIGHT,
+          fontStyle: font?.style ?? "normal",
           fontSize: element.text.fontSize ?? DEFAULT_TEXT_FONT_SIZE,
-          ...(element.text.color === undefined
-            ? {}
-            : {
-                color: resolveColorToken(
+          color:
+            element.text.color === undefined
+              ? resolvedForegroundColor(theme)
+              : resolveColorToken(
                   theme,
                   element.text.color,
                   page,
                   element.id,
                 ),
-              }),
-          bold: element.text.bold ?? (font?.weight ?? 400) >= 700,
+          bold:
+            element.text.bold ??
+            (font?.weight ?? DEFAULT_FONT_WEIGHT) >= 700,
           alignment: element.text.alignment ?? "left",
           wrap: {
             mode: element.text.wrap?.mode ?? "word",
@@ -313,26 +225,24 @@ function resolveElementModel(
         ...bounds,
         content: { kind: element.shape.kind },
         style: {
-          ...(element.shape.fill === undefined
-            ? {}
-            : {
-                fill: resolveColorToken(
+          fill:
+            element.shape.fill === undefined
+              ? null
+              : resolveColorToken(
                   theme,
                   element.shape.fill,
                   page,
                   element.id,
                 ),
-              }),
-          ...(element.shape.stroke === undefined
-            ? {}
-            : {
-                stroke: resolveColorToken(
+          stroke:
+            element.shape.stroke === undefined
+              ? null
+              : resolveColorToken(
                   theme,
                   element.shape.stroke,
                   page,
                   element.id,
                 ),
-              }),
           radius,
         },
       };
@@ -353,16 +263,15 @@ function resolveElementModel(
           },
         },
         style: {
-          ...(element.line.stroke === undefined
-            ? {}
-            : {
-                stroke: resolveColorToken(
+          stroke:
+            element.line.stroke === undefined
+              ? resolvedForegroundColor(theme)
+              : resolveColorToken(
                   theme,
                   element.line.stroke,
                   page,
                   element.id,
                 ),
-              }),
           width: element.line.width ?? 1,
           dash: element.line.dash ?? "solid",
           arrow: element.line.arrow ?? "none",
@@ -389,57 +298,13 @@ function hasAnyCoordinates(element: DeckElement): boolean {
   );
 }
 
-function splitSlotBounds(
-  page: DeckPage,
-  element: DeckElement,
-  layout: Extract<ResolvedLayout, { type: "split" }>,
-  slideWidth: number,
-  slideHeight: number,
-): ResolvedBounds {
-  const slot = element.slot ?? "";
-  const slotMatch = /^(left|right)(?:\.[A-Za-z][A-Za-z0-9_-]*)*$/u.exec(slot);
-  if (slotMatch === null) {
-    throw new LayoutResolutionError(
-      "SLOT_INVALID",
-      `Invalid slot for split layout: ${slot}`,
-      {
-        pageId: page.id,
-        elementId: element.id,
-        layoutType: layout.type,
-        slot,
-      },
-    );
-  }
-
-  const { ratio, margin, gap } = layout.options;
-  const contentWidth = slideWidth - margin * 2 - gap;
-  const contentHeight = slideHeight - margin * 2;
-  if (contentWidth <= 0 || contentHeight <= 0) {
-    return invalidLayoutOptions(
-      page,
-      "Split margin and gap leave no usable slide area",
-      { slideWidth, slideHeight, margin, gap },
-    );
-  }
-
-  const leftWidth = contentWidth * ratio;
-  const rightWidth = contentWidth - leftWidth;
-  return slotMatch[1] === "left"
-    ? { x: margin, y: margin, w: leftWidth, h: contentHeight }
-    : {
-        x: margin + leftWidth + gap,
-        y: margin,
-        w: rightWidth,
-        h: contentHeight,
-      };
-}
-
 function resolvePlacement(
   page: DeckPage,
   element: DeckElement,
   layout: ResolvedLayout,
   slideWidth: number,
   slideHeight: number,
+  slotState: SlotResolutionState,
 ): ResolvedBounds {
   const completeCoordinates = hasCompleteCoordinates(element);
   const anyCoordinates = hasAnyCoordinates(element);
@@ -466,24 +331,14 @@ function resolvePlacement(
       "Free-coordinate placement requires x, y, w, and h",
       { pageId: page.id, elementId: element.id },
     );
-  } else if (element.slot !== undefined && layout.type === "split") {
-    bounds = splitSlotBounds(
+  } else if (element.slot !== undefined) {
+    bounds = resolveLayoutSlot(
       page,
       element,
       layout,
       slideWidth,
       slideHeight,
-    );
-  } else if (element.slot !== undefined) {
-    throw new LayoutResolutionError(
-      "SLOT_INVALID",
-      `Layout does not expose slots: ${layout.type}`,
-      {
-        pageId: page.id,
-        elementId: element.id,
-        layoutType: layout.type,
-        slot: element.slot,
-      },
+      slotState,
     );
   } else {
     throw new LayoutResolutionError(
@@ -540,7 +395,8 @@ function resolvePage(
     seenElementIds.set(element.id, elementIndex);
   });
 
-  const layout = normalizeLayout(page);
+  const layout = normalizeLayout(page, project.theme);
+  const slotState = createSlotResolutionState();
   const elements = page.elements.map((element) => {
     const bounds = resolvePlacement(
       page,
@@ -548,6 +404,7 @@ function resolvePage(
       layout,
       project.manifest.size.width,
       project.manifest.size.height,
+      slotState,
     );
     return resolveElementModel(
       element,
@@ -563,17 +420,16 @@ function resolvePage(
     id: page.id,
     type: page.type,
     layout,
-    ...(page.background === undefined
-      ? {}
-      : {
-          background: {
-            color: resolveColorToken(
+    background: {
+      color:
+        page.background === undefined
+          ? resolvedBackgroundColor(project.theme)
+          : resolveColorToken(
               project.theme,
               page.background.color,
               page,
             ),
-          },
-        }),
+    },
     elements,
   };
 }
