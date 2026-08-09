@@ -26,6 +26,9 @@ importers:
       '@deck-agent/deck-layout':
         specifier: workspace:*
         version: link:../../packages/deck-layout
+      '@deck-agent/deck-qa':
+        specifier: workspace:*
+        version: link:../../packages/deck-qa
       '@deck-agent/renderer-pptx':
         specifier: workspace:*
         version: link:../../packages/renderer-pptx

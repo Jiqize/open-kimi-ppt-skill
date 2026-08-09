@@ -16,7 +16,7 @@ elements:
     text:
       value: Momentum is broadening across the portfolio
       style: heading
-      fontSize: 28
+      fontSize: 24
       color: foreground
   - id: growth-title
     type: text

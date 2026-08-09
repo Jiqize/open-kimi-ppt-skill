@@ -19,6 +19,7 @@ import {
 } from "@deck-agent/deck-layout";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { FontAvailabilityProvider } from "../src/font-availability.js";
 import { qaDeck } from "../src/qa-deck.js";
 
 const temporaryDirectories: string[] = [];
@@ -151,7 +152,7 @@ describe("qaDeck", () => {
           w: 0,
           h: 1,
           content: { kind: "rectangle" },
-          style: { fill: null, stroke: null, radius: 0 },
+          style: { fill: null, stroke: null, strokeWidth: 1, radius: 0 },
         },
         {
           id: "negative-shape",
@@ -161,7 +162,12 @@ describe("qaDeck", () => {
           w: -1,
           h: 1,
           content: { kind: "rectangle" },
-          style: { fill: "#3157F6", stroke: null, radius: 0 },
+          style: {
+            fill: "#3157F6",
+            stroke: null,
+            strokeWidth: 1,
+            radius: 0,
+          },
         },
         {
           id: "zero-line",
@@ -225,7 +231,12 @@ describe("qaDeck", () => {
           w: 4,
           h: 2,
           content: { kind: "rectangle" },
-          style: { fill: "#FFFFFF", stroke: "#DDE5FF", radius: 0.1 },
+          style: {
+            fill: "#FFFFFF",
+            stroke: "#DDE5FF",
+            strokeWidth: 1,
+            radius: 0.1,
+          },
         },
         healthyText("card-copy", { x: 0.75, y: 0.75, w: 3.5, h: 1 }),
         healthyText("text-a", { x: 6, y: 1, w: 3, h: 1 }, "First"),
@@ -387,6 +398,70 @@ describe("qaDeck", () => {
       .toMatchObject({ severity: "error", elementId: "dense-copy" });
   });
 
+  it("reports missing titles and low text contrast as non-blocking warnings", async () => {
+    const lowContrast = healthyText(
+      "body-copy",
+      { x: 1, y: 1, w: 8, h: 1 },
+      "Meaningful content without a title",
+    );
+    const resolved = deck(
+      {
+        ...page("readability", [
+          {
+            ...lowContrast,
+            style: { ...lowContrast.style, color: "#777777" },
+          },
+        ]),
+        background: { color: "#888888" },
+      },
+    );
+
+    const report = await qaDeck(resolved, { assets: inMemoryAssets() });
+
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "MISSING_TITLE",
+          severity: "warning",
+          pageId: "readability",
+        }),
+        expect.objectContaining({
+          code: "LOW_CONTRAST",
+          severity: "warning",
+          elementId: "body-copy",
+        }),
+      ]),
+    );
+    expect(report.ok).toBe(true);
+  });
+
+  it("uses an injectable font provider for FONT_UNAVAILABLE", async () => {
+    const fonts: FontAvailabilityProvider = {
+      check: vi.fn(async () => "unavailable" as const),
+    };
+    const resolved = deck(
+      page("font-check", [
+        healthyText("title", { x: 1, y: 1, w: 8, h: 1 }),
+      ]),
+    );
+
+    const report = await qaDeck(resolved, {
+      assets: inMemoryAssets(),
+      fonts,
+    });
+
+    expect(fonts.check).toHaveBeenCalledWith("Arial");
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        code: "FONT_UNAVAILABLE",
+        severity: "warning",
+        pageId: "font-check",
+        elementId: "title",
+      }),
+    );
+    expect(report.ok).toBe(true);
+  });
+
   it("distinguishes empty pages from decoration-only pages", async () => {
     const resolved = deck(
       page("empty", []),
@@ -399,7 +474,12 @@ describe("qaDeck", () => {
           w: 3,
           h: 2,
           content: { kind: "ellipse" },
-          style: { fill: "#3157F6", stroke: null, radius: 0 },
+          style: {
+            fill: "#3157F6",
+            stroke: null,
+            strokeWidth: 1,
+            radius: 0,
+          },
         },
         {
           id: "decorative-line",

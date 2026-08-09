@@ -10,6 +10,7 @@
   "references": [
     { "path": "../../packages/deck-core" },
     { "path": "../../packages/deck-layout" },
+    { "path": "../../packages/deck-qa" },
     { "path": "../../packages/renderer-pptx" },
     { "path": "../../packages/renderer-preview" }
   ]

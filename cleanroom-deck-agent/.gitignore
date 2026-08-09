@@ -4,3 +4,4 @@ coverage/
 *.tsbuildinfo
 examples/**/output/
 examples/**/preview/
+examples/**/reports/

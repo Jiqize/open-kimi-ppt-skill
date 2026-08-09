@@ -13,6 +13,7 @@ import type {
   ResolvedTextElement,
 } from "@deck-agent/deck-layout";
 
+import type { FontAvailabilityProvider } from "./font-availability.js";
 import type { QaIssue, QaReport, QaSeverity } from "./types.js";
 
 const BOUNDS_EPSILON = 1e-9;
@@ -26,6 +27,7 @@ const PAGE_TEXT_DENSITY_THRESHOLD = 18;
 
 export interface QaContext {
   readonly assets: AssetResolver;
+  readonly fonts?: FontAvailabilityProvider;
 }
 
 function issue(
@@ -213,6 +215,7 @@ function checkShapeVisualDefaults(
   const style = element.style as ResolvedShapeElement["style"] & {
     readonly fill?: unknown;
     readonly stroke?: unknown;
+    readonly strokeWidth?: unknown;
   };
   const missing: string[] = [];
   if (
@@ -226,6 +229,9 @@ function checkShapeVisualDefaults(
     (style.stroke !== null && !colorIsValid(style.stroke))
   ) {
     missing.push("style.stroke");
+  }
+  if (!finite(style.strokeWidth) || style.strokeWidth <= 0) {
+    missing.push("style.strokeWidth");
   }
 
   if (missing.length > 0) {
@@ -255,6 +261,125 @@ function checkShapeVisualDefaults(
   }
 
   return [];
+}
+
+function colorChannels(color: string): readonly [number, number, number] {
+  return [
+    Number.parseInt(color.slice(1, 3), 16),
+    Number.parseInt(color.slice(3, 5), 16),
+    Number.parseInt(color.slice(5, 7), 16),
+  ];
+}
+
+function relativeLuminance(color: string): number {
+  const channels = colorChannels(color).map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return (
+    0.2126 * (channels[0] as number) +
+    0.7152 * (channels[1] as number) +
+    0.0722 * (channels[2] as number)
+  );
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function backgroundUnderText(
+  page: ResolvedPage,
+  element: ResolvedTextElement,
+): string | undefined {
+  if (!colorIsValid(page.background.color)) {
+    return undefined;
+  }
+  let background = page.background.color;
+  const elementIndex = page.elements.indexOf(element);
+  for (let index = 0; index < elementIndex; index += 1) {
+    const candidate = page.elements[index];
+    if (
+      candidate === undefined ||
+      !hasValidGeometry(candidate) ||
+      !contains(boundsOf(candidate), boundsOf(element))
+    ) {
+      continue;
+    }
+    if (candidate.type === "image") {
+      return undefined;
+    }
+    if (candidate.type === "shape" && candidate.style.fill !== null) {
+      background = candidate.style.fill;
+    }
+  }
+  return background;
+}
+
+function checkTextContrast(
+  page: ResolvedPage,
+  element: ResolvedTextElement,
+): QaIssue[] {
+  if (!colorIsValid(element.style.color)) {
+    return [];
+  }
+  const background = backgroundUnderText(page, element);
+  if (background === undefined || !colorIsValid(background)) {
+    return [];
+  }
+  const ratio = contrastRatio(element.style.color, background);
+  const threshold =
+    element.style.fontSize >= 18 ||
+    (element.style.bold && element.style.fontSize >= 14)
+      ? 3
+      : 4.5;
+  if (ratio >= threshold) {
+    return [];
+  }
+  return [
+    issue(
+      "LOW_CONTRAST",
+      "warning",
+      page.id,
+      "Text and its resolved background have low contrast",
+      element.id,
+      {
+        foreground: element.style.color,
+        background,
+        contrastRatio: ratio,
+        threshold,
+      },
+    ),
+  ];
+}
+
+async function checkTextFontAvailability(
+  page: ResolvedPage,
+  element: ResolvedTextElement,
+  provider: FontAvailabilityProvider | undefined,
+): Promise<QaIssue[]> {
+  if (provider === undefined || element.style.fontFamily.trim().length === 0) {
+    return [];
+  }
+  const availability = await provider.check(element.style.fontFamily);
+  if (availability !== "unavailable") {
+    return [];
+  }
+  return [
+    issue(
+      "FONT_UNAVAILABLE",
+      "warning",
+      page.id,
+      "Resolved font family is unavailable on the current host",
+      element.id,
+      { fontFamily: element.style.fontFamily, availability },
+    ),
+  ];
 }
 
 function checkLineVisualDefaults(
@@ -655,6 +780,44 @@ function meaningfulElement(element: ResolvedElement): boolean {
   );
 }
 
+function isPageTitle(deck: ResolvedDeck, element: ResolvedElement): boolean {
+  if (element.type !== "text" || element.content.value.trim().length === 0) {
+    return false;
+  }
+  const normalizedId = element.id.toLocaleLowerCase("en-US");
+  if (
+    normalizedId === "title" ||
+    normalizedId === "page-title" ||
+    normalizedId === "slide-title"
+  ) {
+    return true;
+  }
+  return (
+    element.style.bold &&
+    element.style.fontSize >= 24 &&
+    element.y <= deck.size.height * 0.3 &&
+    element.w >= deck.size.width * 0.3
+  );
+}
+
+function checkMissingTitle(deck: ResolvedDeck, page: ResolvedPage): QaIssue[] {
+  if (
+    page.elements.length === 0 ||
+    !page.elements.some(meaningfulElement) ||
+    page.elements.some((element) => isPageTitle(deck, element))
+  ) {
+    return [];
+  }
+  return [
+    issue(
+      "MISSING_TITLE",
+      "warning",
+      page.id,
+      "Page has meaningful content but no identifiable title",
+    ),
+  ];
+}
+
 function checkPageContent(page: ResolvedPage): QaIssue[] {
   if (page.elements.length === 0) {
     return [
@@ -737,6 +900,7 @@ export async function qaDeck(
 
   for (const page of deck.pages) {
     issues.push(...checkPageContent(page));
+    issues.push(...checkMissingTitle(deck, page));
     issues.push(...checkPageVisualDefaults(page));
     issues.push(...checkDuplicateIds(page));
     issues.push(...checkPageTextDensity(deck, page));
@@ -746,6 +910,14 @@ export async function qaDeck(
       switch (element.type) {
         case "text":
           issues.push(...checkTextVisualDefaults(page, element));
+          issues.push(...checkTextContrast(page, element));
+          issues.push(
+            ...(await checkTextFontAvailability(
+              page,
+              element,
+              context.fonts,
+            )),
+          );
           issues.push(...checkTextHeuristics(page, element));
           break;
         case "image":

@@ -7,6 +7,7 @@ import {
   createProjectAssetResolver,
   createProjectOutputWriter,
   createProjectPreviewWriter,
+  createProjectReportWriter,
   cleanProjectPreviewArtifacts,
   loadDeckProject,
 } from "@deck-agent/deck-core";
@@ -15,6 +16,11 @@ import {
   type ResolvedDeck,
   type ResolvedTextElement,
 } from "@deck-agent/deck-layout";
+import {
+  createSystemFontAvailabilityProvider,
+  qaDeck,
+  type QaIssue,
+} from "@deck-agent/deck-qa";
 import { renderPptx, verifyPptx } from "@deck-agent/renderer-pptx";
 import { renderPreviewPages } from "@deck-agent/renderer-preview";
 
@@ -160,14 +166,6 @@ function successfulResult(
 }
 
 async function executeCommand(command: ParsedCommand): Promise<CliCommandResult> {
-  if (command.command === "qa") {
-    throw new CliError(
-      "CLI_COMMAND_NOT_IMPLEMENTED",
-      `${command.command} is implemented by a later Milestone 1 task`,
-      { command: command.command },
-    );
-  }
-
   const { root, deck } = await loadResolvedProject(command.projectPath);
   const elementCount = deck.pages.reduce(
     (count, page) => count + page.elements.length,
@@ -216,6 +214,47 @@ async function executeCommand(command: ParsedCommand): Promise<CliCommandResult>
       },
       preview.pages.map((page) => page.absolutePath),
     );
+  }
+
+  if (command.command === "qa") {
+    const report = await qaDeck(deck, {
+      assets: createProjectAssetResolver(root),
+      fonts: createSystemFontAvailabilityProvider(),
+    });
+    const reportData = new TextEncoder().encode(
+      `${JSON.stringify(report, null, 2)}\n`,
+    );
+    const written = await createProjectReportWriter(root).write(
+      "reports/qa.json",
+      reportData,
+    );
+    const warnings = report.issues
+      .filter((issue) => issue.severity !== "error")
+      .map(qaDiagnostic);
+    const errors = report.issues
+      .filter((issue) => issue.severity === "error")
+      .map(qaDiagnostic);
+    return {
+      command: "qa",
+      status:
+        errors.length > 0
+          ? "error"
+          : warnings.length > 0
+            ? "warning"
+            : "ok",
+      warnings,
+      errors,
+      outputPaths: [written.absolutePath],
+      details: {
+        projectRoot: root,
+        report: {
+          relativePath: written.relativePath,
+          bytesWritten: written.bytesWritten,
+        },
+        summary: report.summary,
+        issueCodes: report.issues.map((issue) => issue.code),
+      },
+    };
   }
 
   const rendered = await renderPptx(deck, {
@@ -278,6 +317,19 @@ async function executeCommand(command: ParsedCommand): Promise<CliCommandResult>
   );
 }
 
+function qaDiagnostic(issue: QaIssue): CliDiagnostic {
+  return {
+    code: issue.code,
+    message: issue.message,
+    details: {
+      severity: issue.severity,
+      pageId: issue.pageId,
+      ...(issue.elementId === undefined ? {} : { elementId: issue.elementId }),
+      ...(issue.details === undefined ? {} : { issueDetails: issue.details }),
+    },
+  };
+}
+
 function diagnosticFromError(error: unknown): CliDiagnostic {
   if (error instanceof Error) {
     const record = error as Error & {
@@ -326,6 +378,12 @@ function humanSummary(result: CliCommandResult): string {
   if (result.command === "preview") {
     return `OK preview: ${String(result.details.pageCount)} page image(s)`;
   }
+  if (result.command === "qa") {
+    const summary = result.details.summary as
+      | Readonly<{ error?: unknown; warning?: unknown; info?: unknown }>
+      | undefined;
+    return `OK qa: ${String(summary?.error ?? 0)} error(s), ${String(summary?.warning ?? 0)} warning(s), ${String(summary?.info ?? 0)} info issue(s)`;
+  }
   return `OK render: ${result.outputPaths[0] ?? "output/deck.pptx"}`;
 }
 
@@ -342,7 +400,7 @@ export async function runCli(
     parsed = parseCommand(argv);
     const result = await executeCommand(parsed);
     io.stdout(json ? JSON.stringify(result, null, 2) : humanSummary(result));
-    return 0;
+    return result.status === "error" ? 1 : 0;
   } catch (error) {
     const command = parsed?.command ??
       (argv.find((argument) =>

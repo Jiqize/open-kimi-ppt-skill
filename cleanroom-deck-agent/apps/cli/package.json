@@ -6,6 +6,7 @@
   "dependencies": {
     "@deck-agent/deck-core": "workspace:*",
     "@deck-agent/deck-layout": "workspace:*",
+    "@deck-agent/deck-qa": "workspace:*",
     "@deck-agent/renderer-pptx": "workspace:*",
     "@deck-agent/renderer-preview": "workspace:*"
   },

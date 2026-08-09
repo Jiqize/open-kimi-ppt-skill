@@ -13,13 +13,13 @@ elements:
   - id: title
     type: text
     x: 0.68
-    y: 0.35
+    y: 0.08
     w: 8.64
-    h: 0.55
+    h: 0.4
     text:
       value: From signal to action in one flow
       style: heading
-      fontSize: 28
+      fontSize: 26
       color: foreground
   - id: workflow-title
     type: text

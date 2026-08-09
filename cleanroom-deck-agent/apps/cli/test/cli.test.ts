@@ -181,4 +181,42 @@ describe("Task 09 CLI validate and render", () => {
     const invalid = await invoke(["validate", projectRoot, "--force", "--json"]);
     expect(jsonResult(invalid.stdout).errors[0]?.code).toBe("CLI_ARGUMENT_INVALID");
   }, 30_000);
+
+  it("writes a machine-readable Structural QA report and does not block warnings", async () => {
+    const projectRoot = await copyFixture();
+    const invocation = await invoke(["qa", projectRoot, "--json"]);
+    const result = jsonResult(invocation.stdout);
+
+    expect(invocation.exitCode).toBe(0);
+    expect(["ok", "warning"]).toContain(result.status);
+    expect(result.errors).toEqual([]);
+    expect(result.outputPaths).toEqual([
+      path.join(await realpath(projectRoot), "reports/qa.json"),
+    ]);
+    const report = JSON.parse(
+      await readFile(path.join(projectRoot, "reports/qa.json"), "utf8"),
+    ) as { readonly version: number; readonly ok: boolean };
+    expect(report).toMatchObject({ version: 1, ok: true });
+  });
+
+  it("returns nonzero for QA errors after safely writing reports/qa.json", async () => {
+    const projectRoot = await copyFixture();
+    await rm(path.join(projectRoot, "media/hero.svg"));
+
+    const invocation = await invoke(["qa", projectRoot, "--json"]);
+    const result = jsonResult(invocation.stdout);
+
+    expect(invocation.exitCode).toBe(1);
+    expect(result.status).toBe("error");
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "MISSING_ASSET" }),
+      ]),
+    );
+    expect(
+      JSON.parse(
+        await readFile(path.join(projectRoot, "reports/qa.json"), "utf8"),
+      ),
+    ).toMatchObject({ ok: false, summary: { error: 1 } });
+  });
 });
