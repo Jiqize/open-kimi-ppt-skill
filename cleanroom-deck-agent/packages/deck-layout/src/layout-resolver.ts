@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { DeckProject } from "@deck-agent/deck-core";
 import type {
   DeckElement,
@@ -185,11 +187,52 @@ function resolveRadiusToken(
   return value;
 }
 
+function assetSourceProtocol(source: string): string | undefined {
+  if (/^[A-Za-z]:[\\/]/u.test(source) || /^\\\\/u.test(source)) {
+    return undefined;
+  }
+
+  try {
+    return new URL(source).protocol;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeAssetSource(
+  project: DeckProject,
+  pageIndex: number,
+  source: string,
+): string {
+  if (
+    assetSourceProtocol(source) !== undefined ||
+    /^[A-Za-z]:[\\/]/u.test(source) ||
+    /^\\\\/u.test(source)
+  ) {
+    return source;
+  }
+
+  const pageSourcePath = project.manifest.pages[pageIndex];
+  if (pageSourcePath === undefined) {
+    return source;
+  }
+
+  const absoluteSource = path.isAbsolute(source)
+    ? path.resolve(source)
+    : path.resolve(
+        path.dirname(path.resolve(project.root, pageSourcePath)),
+        source,
+      );
+  return path.relative(project.root, absoluteSource).split(path.sep).join("/");
+}
+
 function resolveElementModel(
   element: DeckElement,
   page: DeckPage,
   theme: DeckTheme | undefined,
   bounds: ResolvedBounds,
+  project: DeckProject,
+  pageIndex: number,
 ): ResolvedElement {
   switch (element.type) {
     case "text": {
@@ -247,7 +290,7 @@ function resolveElementModel(
         type: "image",
         ...bounds,
         content: {
-          source: element.source,
+          source: normalizeAssetSource(project, pageIndex, element.source),
           fit: element.fit ?? "contain",
           ...(element.crop === undefined ? {} : { crop: { ...element.crop } }),
           ...(element.alt === undefined ? {} : { alt: element.alt }),
@@ -478,7 +521,25 @@ function resolvePlacement(
 function resolvePage(
   page: DeckPage,
   project: DeckProject,
+  pageIndex: number,
 ): ResolvedPage {
+  const seenElementIds = new Map<string, number>();
+  page.elements.forEach((element, elementIndex) => {
+    const firstIndex = seenElementIds.get(element.id);
+    if (firstIndex !== undefined) {
+      throw new LayoutResolutionError(
+        "ELEMENT_ID_DUPLICATE",
+        `Element id must be unique within page ${page.id}: ${element.id}`,
+        {
+          pageId: page.id,
+          elementId: element.id,
+          details: { firstIndex, duplicateIndex: elementIndex },
+        },
+      );
+    }
+    seenElementIds.set(element.id, elementIndex);
+  });
+
   const layout = normalizeLayout(page);
   const elements = page.elements.map((element) => {
     const bounds = resolvePlacement(
@@ -488,7 +549,14 @@ function resolvePage(
       project.manifest.size.width,
       project.manifest.size.height,
     );
-    return resolveElementModel(element, page, project.theme, bounds);
+    return resolveElementModel(
+      element,
+      page,
+      project.theme,
+      bounds,
+      project,
+      pageIndex,
+    );
   });
 
   return {
@@ -530,6 +598,8 @@ export function resolveDeck(project: DeckProject): ResolvedDeck {
   return {
     size: { ...project.manifest.size },
     theme: copyTheme(project.theme),
-    pages: project.pages.map((page) => resolvePage(page, project)),
+    pages: project.pages.map((page, pageIndex) =>
+      resolvePage(page, project, pageIndex),
+    ),
   };
 }

@@ -5,7 +5,8 @@ export type LayoutResolutionErrorCode =
   | "PLACEMENT_CONFLICT"
   | "SLOT_INVALID"
   | "ELEMENT_OUT_OF_BOUNDS"
-  | "THEME_TOKEN_UNRESOLVED";
+  | "THEME_TOKEN_UNRESOLVED"
+  | "ELEMENT_ID_DUPLICATE";
 
 export interface LayoutResolutionErrorContext {
   readonly pageId: string;
@@ -47,4 +48,3 @@ export class LayoutResolutionError extends Error {
     };
   }
 }
-

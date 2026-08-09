@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@deck-agent/deck-schema": "workspace:*",
+    "image-size": "2.0.2",
     "yaml": "2.9.0"
   },
   "exports": {

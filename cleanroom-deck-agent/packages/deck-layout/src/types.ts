@@ -60,7 +60,9 @@ export interface ResolvedPoint {
 }
 
 export interface ResolvedLineContent {
+  /** Absolute source point. */
   readonly start: ResolvedPoint;
+  /** Absolute destination point; end arrows point here from start. */
   readonly end: ResolvedPoint;
 }
 
@@ -141,4 +143,3 @@ export interface ResolvedDeck {
   readonly theme: DeckTheme | null;
   readonly pages: readonly ResolvedPage[];
 }
-

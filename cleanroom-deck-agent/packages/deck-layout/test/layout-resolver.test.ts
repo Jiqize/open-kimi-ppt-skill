@@ -66,10 +66,34 @@ describe("resolveDeck", () => {
       w: 8,
       h: 5,
       content: {
-        source: "../media/hero.jpg",
+        source: "media/hero.jpg",
         fit: "cover",
       },
       style: {},
+    });
+  });
+
+  it("preserves a remote image URL for the asset provider", () => {
+    const project = projectWithPage({
+      id: "page-01",
+      type: "cover",
+      layout: { type: "free" },
+      elements: [
+        {
+          id: "remote-hero",
+          type: "image",
+          x: 1,
+          y: 1,
+          w: 8,
+          h: 4,
+          source: "https://assets.example.com/hero.png",
+        },
+      ],
+    });
+
+    expect(resolveDeck(project).pages[0]?.elements[0]).toMatchObject({
+      type: "image",
+      content: { source: "https://assets.example.com/hero.png" },
     });
   });
 
@@ -185,6 +209,85 @@ describe("resolveDeck", () => {
     expect(JSON.stringify(resolveDeck(project))).toBe(
       JSON.stringify(resolveDeck(project)),
     );
+  });
+
+  it("rejects duplicate element ids within one page", () => {
+    const project = projectWithPage({
+      id: "page-01",
+      type: "cover",
+      layout: { type: "free" },
+      elements: [
+        {
+          id: "duplicate",
+          type: "text",
+          x: 1,
+          y: 1,
+          w: 4,
+          h: 1,
+          text: { value: "First" },
+        },
+        {
+          id: "duplicate",
+          type: "text",
+          x: 1,
+          y: 2,
+          w: 4,
+          h: 1,
+          text: { value: "Second" },
+        },
+      ],
+    });
+
+    expect(() => resolveDeck(project)).toThrowError(
+      expect.objectContaining({
+        code: "ELEMENT_ID_DUPLICATE",
+        context: expect.objectContaining({
+          pageId: "page-01",
+          elementId: "duplicate",
+        }),
+      }),
+    );
+  });
+
+  it("allows the same element id on different pages", () => {
+    const repeatedElement = {
+      id: "repeated",
+      type: "text" as const,
+      x: 1,
+      y: 1,
+      w: 4,
+      h: 1,
+      text: { value: "Page-local id" },
+    };
+    const project: DeckProject = {
+      root: "/virtual/deck",
+      manifest: {
+        version: 1,
+        id: "test-deck",
+        title: "Test Deck",
+        size: { width: 10, height: 6 },
+        pages: ["pages/01.yaml", "pages/02.yaml"],
+      },
+      pages: [
+        {
+          id: "page-01",
+          type: "content",
+          layout: { type: "free" },
+          elements: [repeatedElement],
+        },
+        {
+          id: "page-02",
+          type: "content",
+          layout: { type: "free" },
+          elements: [repeatedElement],
+        },
+      ],
+    };
+
+    expect(resolveDeck(project).pages.map((page) => page.elements[0]?.id)).toEqual([
+      "repeated",
+      "repeated",
+    ]);
   });
 
   it("fails clearly when a theme token is missing", () => {

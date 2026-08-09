@@ -95,8 +95,8 @@ const elements: DeckElement[] = [
     w: 6,
     h: 0.5,
     line: {
-      start: { x: 0, y: 0.5 },
-      end: { x: 1, y: 0.5 },
+      start: { x: 1, y: 0.5 },
+      end: { x: 0, y: 0.5 },
       stroke: "foreground",
       width: 2,
       dash: "dash",
@@ -130,12 +130,12 @@ describe("basic resolved elements", () => {
     });
   });
 
-  it("preserves an unchecked local image source, fit, crop, and alt text", () => {
+  it("normalizes a page-relative image source and preserves image options", () => {
     expect(resolvedElements?.[1]).toMatchObject({
       id: "missing-image",
       type: "image",
       content: {
-        source: "../media/not-created-yet.jpg",
+        source: "media/not-created-yet.jpg",
         fit: "contain",
         crop: { x: 0.1, y: 0.2, w: 0.8, h: 0.7 },
         alt: "A future local asset",
@@ -153,19 +153,45 @@ describe("basic resolved elements", () => {
     });
   });
 
-  it("converts normalized line endpoints into absolute slide coordinates", () => {
+  it("keeps line start as source and end as arrow destination", () => {
     expect(resolvedElements?.[3]).toMatchObject({
       id: "arrow",
       type: "line",
       content: {
-        start: { x: 2, y: 5.25 },
-        end: { x: 8, y: 5.25 },
+        start: { x: 8, y: 5.25 },
+        end: { x: 2, y: 5.25 },
       },
       style: {
         stroke: "#161616",
         width: 2,
         dash: "dash",
         arrow: "end",
+      },
+    });
+  });
+
+  it("resolves text defaults before renderer dispatch", () => {
+    const resolved = resolveDeck(
+      projectWithElements([
+        {
+          id: "default-text",
+          type: "text",
+          x: 1,
+          y: 1,
+          w: 4,
+          h: 1,
+          text: { value: "Defaults" },
+        },
+      ]),
+    ).pages[0]?.elements[0];
+
+    expect(resolved).toMatchObject({
+      type: "text",
+      style: {
+        fontSize: 18,
+        bold: false,
+        alignment: "left",
+        wrap: { mode: "word", overflow: "clip" },
       },
     });
   });
