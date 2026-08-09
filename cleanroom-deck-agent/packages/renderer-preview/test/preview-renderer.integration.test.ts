@@ -15,6 +15,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   renderPreview,
+  renderPreviewPages,
+  type PreviewPagesRenderResult,
   type PreviewRenderResult,
 } from "../src/preview-renderer.js";
 
@@ -30,12 +32,16 @@ const businessSource = fileURLToPath(
 const imageHeavySource = fileURLToPath(
   new URL("../../../examples/golden-preview-image-heavy", import.meta.url),
 );
+const minimalSource = fileURLToPath(
+  new URL("../../../examples/minimal-report", import.meta.url),
+);
 
 let temporaryRoot: string;
 let business: GoldenRender;
 let imageHeavy: GoldenRender;
 let businessPptx: PptxRenderResult;
 let businessDeckBeforeRendering: string;
+let minimalPages: PreviewPagesRenderResult;
 
 async function removeTemporaryDirectory(directory: string): Promise<void> {
   const relative = path.relative(tmpdir(), directory);
@@ -92,6 +98,14 @@ beforeAll(async () => {
     assets: createProjectAssetResolver(business.projectRoot),
     output: createProjectOutputWriter(business.projectRoot),
   });
+
+  const minimalRoot = path.join(temporaryRoot, "minimal-report");
+  await cp(minimalSource, minimalRoot, { recursive: true });
+  const minimalProject = await loadDeckProject(minimalRoot);
+  minimalPages = await renderPreviewPages(resolveDeck(minimalProject), {
+    assets: createProjectAssetResolver(minimalRoot),
+    output: createProjectPreviewWriter(minimalRoot),
+  });
 }, 60_000);
 
 afterAll(async () => {
@@ -99,6 +113,14 @@ afterAll(async () => {
 });
 
 describe("Task 09 Preview renderer integration", () => {
+  it("offers a page-only API for the canonical Task 12 contract", async () => {
+    expect(minimalPages.pages).toHaveLength(1);
+    expect(minimalPages.pages[0]?.relativePath).toBe("preview/01.png");
+    await expect(
+      readFile(path.join(temporaryRoot, "minimal-report/preview/overview.png")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it.each([
     ["business/report", () => business],
     ["image-heavy", () => imageHeavy],

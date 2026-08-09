@@ -55,7 +55,12 @@ function resolvedPageWithoutReadableLayout(): ResolvedPage {
         w: 2,
         h: 1,
         content: { kind: "ellipse" },
-        style: { fill: "#DDE5FF", stroke: "#3157F6", radius: 0 },
+        style: {
+          fill: "#DDE5FF",
+          stroke: "#3157F6",
+          strokeWidth: 2.5,
+          radius: 0,
+        },
       },
       {
         id: "title",
@@ -132,6 +137,7 @@ describe("renderResolvedPageSvg", () => {
     expect(result.pageId).toBe("resolved-page");
     expect(result.svg).toContain('viewBox="0 0 960 540"');
     expect(result.svg).toContain('id="card" data-element-type="shape"');
+    expect(result.svg).toContain('stroke-width="3.333333333333"');
     expect(result.svg).toContain('id="title" data-element-type="text"');
     expect(result.svg).toContain("Resolved &amp; editable");
     expect(result.svg).toContain('id="hero" data-element-type="image"');

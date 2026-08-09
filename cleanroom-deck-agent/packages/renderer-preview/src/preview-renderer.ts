@@ -38,6 +38,14 @@ export interface PreviewRenderResult {
   readonly overview: ProjectPreviewWriteResult;
 }
 
+export interface PreviewPagesRenderResult {
+  readonly pages: readonly PreviewPageRenderResult[];
+}
+
+interface InternalPreviewRenderResult extends PreviewPagesRenderResult {
+  readonly overview?: ProjectPreviewWriteResult;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -209,7 +217,26 @@ export class PreviewRenderer {
     this.#context = context;
   }
 
+  async renderPages(deck: ResolvedDeck): Promise<PreviewPagesRenderResult> {
+    const result = await this.#render(deck, false);
+    return { pages: result.pages };
+  }
+
   async render(deck: ResolvedDeck): Promise<PreviewRenderResult> {
+    const result = await this.#render(deck, true);
+    if (result.overview === undefined) {
+      throw new PreviewRenderError(
+        "PREVIEW_SCREENSHOT_FAILED",
+        "Legacy overview rendering did not produce an output",
+      );
+    }
+    return { pages: result.pages, overview: result.overview };
+  }
+
+  async #render(
+    deck: ResolvedDeck,
+    includeLegacyOverview: boolean,
+  ): Promise<InternalPreviewRenderResult> {
     const dimensions = pixelDimensions(deck);
     const resolvedPages: ResolvedPageSvg[] = [];
     for (const page of deck.pages) {
@@ -241,6 +268,10 @@ export class PreviewRenderer {
           height: dimensions.height,
           ...written,
         });
+      }
+
+      if (!includeLegacyOverview) {
+        return { pages: pageResults };
       }
 
       const overview = overviewGeometry(
@@ -287,4 +318,12 @@ export function renderPreview(
   context: PreviewRendererContext,
 ): Promise<PreviewRenderResult> {
   return new PreviewRenderer(context).render(deck);
+}
+
+/** Render only canonical per-page PNG artifacts. Overview composition is Task 15. */
+export function renderPreviewPages(
+  deck: ResolvedDeck,
+  context: PreviewRendererContext,
+): Promise<PreviewPagesRenderResult> {
+  return new PreviewRenderer(context).renderPages(deck);
 }

@@ -243,6 +243,7 @@ function resolveElementModel(
                   page,
                   element.id,
                 ),
+          strokeWidth: 1,
           radius,
         },
       };

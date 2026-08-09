@@ -185,6 +185,7 @@ describe("resolveDeck", () => {
     expect(page?.elements[0]?.style).toEqual({
       fill: "#3157F6",
       stroke: "#686868",
+      strokeWidth: 1,
       radius: 0,
     });
   });

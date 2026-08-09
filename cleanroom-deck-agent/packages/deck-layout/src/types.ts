@@ -51,6 +51,7 @@ export interface ResolvedShapeContent {
 export interface ResolvedShapeStyle {
   readonly fill: string | null;
   readonly stroke: string | null;
+  readonly strokeWidth: number;
   readonly radius: number;
 }
 

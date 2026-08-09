@@ -106,6 +106,7 @@ describe("Task 07 PPTX renderer integration", () => {
   it("keeps the shape as an editable rounded rectangle", () => {
     expect(slideXml).toContain('name="card"');
     expect(slideXml).toContain('<a:prstGeom prst="roundRect">');
+    expect(slideXml).toContain('<a:ln w="12700">');
   });
 
   it("keeps the line editable with its arrow at the destination", () => {

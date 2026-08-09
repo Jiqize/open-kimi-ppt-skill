@@ -149,7 +149,7 @@ function textMarkup(element: ResolvedTextElement): string {
 function shapeMarkup(element: ResolvedShapeElement): string {
   const fill = element.style.fill ?? "none";
   const stroke = element.style.stroke ?? "none";
-  const strokeWidth = number(pointsToPixels(1));
+  const strokeWidth = number(pointsToPixels(element.style.strokeWidth));
   const common = [
     `id="${escapeXml(element.id)}"`,
     'data-element-type="shape"',

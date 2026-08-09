@@ -150,7 +150,12 @@ describe("basic resolved elements", () => {
       id: "card",
       type: "shape",
       content: { kind: "rectangle" },
-      style: { fill: "#3157F6", stroke: "#686868", radius: 0.12 },
+      style: {
+        fill: "#3157F6",
+        stroke: "#686868",
+        strokeWidth: 1,
+        radius: 0.12,
+      },
     });
   });
 
@@ -233,7 +238,7 @@ describe("basic resolved elements", () => {
       elements: [
         {
           id: "plain-shape",
-          style: { fill: null, stroke: null, radius: 0 },
+          style: { fill: null, stroke: null, strokeWidth: 1, radius: 0 },
         },
         {
           id: "plain-line",

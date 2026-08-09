@@ -264,7 +264,10 @@ class SlideElementRenderer implements ResolvedElementRenderer<Promise<void>> {
       line:
         element.style.stroke === null
           ? { type: "none" }
-          : { color: pptxColor(element.style.stroke) },
+          : {
+              color: pptxColor(element.style.stroke),
+              width: element.style.strokeWidth,
+            },
       ...(rounded ? { rectRadius: element.style.radius } : {}),
     });
   }
