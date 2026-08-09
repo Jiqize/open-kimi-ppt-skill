@@ -8,8 +8,12 @@ import {
   createProjectOutputWriter,
   loadDeckProject,
 } from "@deck-agent/deck-core";
-import { resolveDeck, type ResolvedDeck } from "@deck-agent/deck-layout";
-import { renderPptx } from "@deck-agent/renderer-pptx";
+import {
+  resolveDeck,
+  type ResolvedDeck,
+  type ResolvedTextElement,
+} from "@deck-agent/deck-layout";
+import { renderPptx, verifyPptx } from "@deck-agent/renderer-pptx";
 
 export type DeckCommandName = "validate" | "render" | "preview" | "qa";
 
@@ -166,6 +170,23 @@ async function executeCommand(command: ParsedCommand): Promise<CliCommandResult>
     assets: createProjectAssetResolver(root),
     output: createProjectOutputWriter(root),
   });
+  const imageCount = deck.pages.reduce(
+    (count, page) =>
+      count + page.elements.filter((element) => element.type === "image").length,
+    0,
+  );
+  const representativeTexts = deck.pages.map(
+    (page) =>
+      page.elements.find(
+        (element): element is ResolvedTextElement =>
+          element.type === "text" && element.content.value.length > 0,
+      )?.content.value,
+  );
+  const verification = await verifyPptx(rendered.absolutePath, {
+    slideCount: deck.pages.length,
+    imageCount,
+    representativeTexts,
+  });
   return successfulResult(
     "render",
     {
@@ -177,7 +198,29 @@ async function executeCommand(command: ParsedCommand): Promise<CliCommandResult>
         relativePath: rendered.relativePath,
         bytesWritten: rendered.bytesWritten,
       },
-      validation: rendered.validation,
+      verification: {
+        status: verification.status,
+        zip: {
+          valid: verification.zipValid,
+          crcValid: verification.crcValid,
+          crcEntriesChecked: verification.crcEntriesChecked,
+        },
+        slides: {
+          expected: verification.expectedSlideCount,
+          actual: verification.slideCount,
+        },
+        media: {
+          pictures: verification.pictureCount,
+          files: verification.mediaCount,
+        },
+        relationships: {
+          total: verification.relationshipCount,
+          presentation: verification.presentationRelationshipCount,
+          slideFiles: verification.slideRelationshipFileCount,
+          media: verification.mediaRelationshipCount,
+        },
+        representativeTextCount: verification.representativeTextCount,
+      },
     },
     [rendered.absolutePath],
   );

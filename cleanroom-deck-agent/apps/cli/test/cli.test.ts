@@ -80,7 +80,13 @@ describe("Task 09 CLI validate and render", () => {
     expect(result.outputPaths).toEqual([
       path.join(await realpath(projectRoot), "output/deck.pptx"),
     ]);
-    expect(result.details.validation).toMatchObject({ zipValid: true, slideCount: 1 });
+    expect(result.details.verification).toMatchObject({
+      status: "verified",
+      zip: { valid: true, crcValid: true },
+      slides: { expected: 1, actual: 1 },
+      media: { pictures: 1 },
+      relationships: { presentation: 1, slideFiles: 1 },
+    });
   });
 
   it("returns a machine-readable project error", async () => {

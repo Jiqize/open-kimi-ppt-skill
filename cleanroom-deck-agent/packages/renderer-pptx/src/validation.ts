@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { strFromU8, unzipSync } from "fflate";
@@ -12,7 +13,12 @@ export interface PptxValidationExpectations {
 
 export interface PptxValidationResult {
   readonly zipValid: true;
+  readonly crcValid: true;
+  readonly crcEntriesChecked: number;
   readonly slideCount: number;
+  readonly presentationRelationshipCount: number;
+  readonly slideRelationshipFileCount: number;
+  readonly relationshipCount: number;
   readonly pictureCount: number;
   readonly mediaCount: number;
   readonly mediaRelationshipCount: number;
@@ -26,6 +32,140 @@ interface Relationship {
 }
 
 type ZipEntries = Readonly<Record<string, Uint8Array>>;
+
+const END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x06054b50;
+const CENTRAL_DIRECTORY_SIGNATURE = 0x02014b50;
+
+function uint16(data: Uint8Array, offset: number): number {
+  if (offset < 0 || offset + 2 > data.length) {
+    throw new PptxRenderError(
+      "PPTX_ZIP_INVALID",
+      "PPTX ZIP contains a truncated 16-bit field",
+      { offset },
+    );
+  }
+  return (data[offset] as number) | ((data[offset + 1] as number) << 8);
+}
+
+function uint32(data: Uint8Array, offset: number): number {
+  if (offset < 0 || offset + 4 > data.length) {
+    throw new PptxRenderError(
+      "PPTX_ZIP_INVALID",
+      "PPTX ZIP contains a truncated 32-bit field",
+      { offset },
+    );
+  }
+  return (
+    ((data[offset] as number) |
+      ((data[offset + 1] as number) << 8) |
+      ((data[offset + 2] as number) << 16) |
+      ((data[offset + 3] as number) << 24)) >>> 0
+  );
+}
+
+function endOfCentralDirectoryOffset(data: Uint8Array): number {
+  const minimumOffset = Math.max(0, data.length - 65_558);
+  for (let offset = data.length - 22; offset >= minimumOffset; offset -= 1) {
+    if (uint32(data, offset) === END_OF_CENTRAL_DIRECTORY_SIGNATURE) {
+      return offset;
+    }
+  }
+  throw new PptxRenderError(
+    "PPTX_ZIP_INVALID",
+    "PPTX ZIP end-of-central-directory record is missing",
+  );
+}
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function verifyZipCrc(data: Uint8Array, entries: ZipEntries): number {
+  const eocdOffset = endOfCentralDirectoryOffset(data);
+  const entryCount = uint16(data, eocdOffset + 10);
+  const centralDirectoryOffset = uint32(data, eocdOffset + 16);
+  if (entryCount === 0xffff || centralDirectoryOffset === 0xffffffff) {
+    throw new PptxRenderError(
+      "PPTX_ZIP_INVALID",
+      "ZIP64 packages are not supported by the Milestone 1 verifier",
+    );
+  }
+
+  let offset = centralDirectoryOffset;
+  const seenNames = new Set<string>();
+  for (let index = 0; index < entryCount; index += 1) {
+    if (uint32(data, offset) !== CENTRAL_DIRECTORY_SIGNATURE) {
+      throw new PptxRenderError(
+        "PPTX_ZIP_INVALID",
+        "PPTX ZIP central-directory entry is missing or truncated",
+        { index, offset },
+      );
+    }
+    const flags = uint16(data, offset + 8);
+    const expectedCrc = uint32(data, offset + 16);
+    const expectedSize = uint32(data, offset + 24);
+    const fileNameLength = uint16(data, offset + 28);
+    const extraLength = uint16(data, offset + 30);
+    const commentLength = uint16(data, offset + 32);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + fileNameLength;
+    if (nameEnd > data.length) {
+      throw new PptxRenderError(
+        "PPTX_ZIP_INVALID",
+        "PPTX ZIP central-directory filename is truncated",
+        { index, offset },
+      );
+    }
+    const fileName = strFromU8(data.subarray(nameStart, nameEnd), (flags & 2048) === 0);
+    if (seenNames.has(fileName)) {
+      throw new PptxRenderError(
+        "PPTX_ZIP_INVALID",
+        `PPTX ZIP contains a duplicate entry: ${fileName}`,
+        { entry: fileName },
+      );
+    }
+    seenNames.add(fileName);
+    const unpacked = entries[fileName];
+    if (unpacked === undefined) {
+      throw new PptxRenderError(
+        "PPTX_ZIP_INVALID",
+        `PPTX ZIP central-directory entry was not unpacked: ${fileName}`,
+        { entry: fileName },
+      );
+    }
+    const actualCrc = crc32(unpacked);
+    if (actualCrc !== expectedCrc || unpacked.length !== expectedSize) {
+      throw new PptxRenderError(
+        "PPTX_CRC_INVALID",
+        `PPTX ZIP CRC or size check failed: ${fileName}`,
+        {
+          entry: fileName,
+          expectedCrc,
+          actualCrc,
+          expectedSize,
+          actualSize: unpacked.length,
+        },
+      );
+    }
+    offset = nameEnd + extraLength + commentLength;
+  }
+
+  if (seenNames.size !== Object.keys(entries).length) {
+    throw new PptxRenderError(
+      "PPTX_ZIP_INVALID",
+      "PPTX ZIP entry count does not match its central directory",
+      { centralDirectoryEntries: seenNames.size, unpackedEntries: Object.keys(entries).length },
+    );
+  }
+  return seenNames.size;
+}
 
 function requiredEntry(entries: ZipEntries, name: string): Uint8Array {
   const entry = entries[name];
@@ -143,6 +283,8 @@ export function validatePptxPackage(
     });
   }
 
+  const crcEntriesChecked = verifyZipCrc(data, entries);
+
   requiredEntry(entries, "[Content_Types].xml");
   requiredEntry(entries, "ppt/presentation.xml");
   const presentationRelationships = parseRelationships(
@@ -190,6 +332,7 @@ export function validatePptxPackage(
   let pictureCount = 0;
   let mediaRelationshipCount = 0;
   let representativeTextCount = 0;
+  let relationshipCount = presentationRelationships.length;
 
   slideParts.forEach((slidePart, index) => {
     const slideXml = xmlEntry(entries, slidePart);
@@ -197,6 +340,7 @@ export function validatePptxPackage(
 
     const relationshipPart = `ppt/slides/_rels/${path.posix.basename(slidePart)}.rels`;
     const relationships = parseRelationships(xmlEntry(entries, relationshipPart));
+    relationshipCount += relationships.length;
     const relationshipsById = new Map(
       relationships.map((relationship) => [relationship.id, relationship]),
     );
@@ -270,10 +414,48 @@ export function validatePptxPackage(
 
   return {
     zipValid: true,
+    crcValid: true,
+    crcEntriesChecked,
     slideCount: slideParts.length,
+    presentationRelationshipCount: presentationRelationships.length,
+    slideRelationshipFileCount: slideParts.length,
+    relationshipCount,
     pictureCount,
     mediaCount,
     mediaRelationshipCount,
     representativeTextCount,
+  };
+}
+
+export interface PptxVerificationExpectations
+  extends PptxValidationExpectations {}
+
+export interface PptxVerificationReport extends PptxValidationResult {
+  readonly status: "verified";
+  readonly path: string;
+  readonly expectedSlideCount: number;
+}
+
+export async function verifyPptx(
+  filePath: string,
+  expected: PptxVerificationExpectations,
+): Promise<PptxVerificationReport> {
+  let data: Uint8Array;
+  try {
+    data = new Uint8Array(await readFile(filePath));
+  } catch (error) {
+    throw new PptxRenderError(
+      "PPTX_READ_FAILED",
+      `Could not read generated PPTX: ${filePath}`,
+      { path: filePath, message: error instanceof Error ? error.message : String(error) },
+    );
+  }
+
+  const validation = validatePptxPackage(data, expected);
+  return {
+    status: "verified",
+    path: filePath,
+    expectedSlideCount: expected.slideCount,
+    ...validation,
   };
 }
