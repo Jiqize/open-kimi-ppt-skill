@@ -1,4 +1,13 @@
-import { cp, mkdtemp, realpath, rm } from "node:fs/promises";
+import {
+  access,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -125,4 +134,51 @@ describe("Task 09 CLI validate and render", () => {
     expect(failure.stdout).toEqual([]);
     expect(failure.stderr[0]).toContain("CLI_FORMAT_REQUIRED");
   });
+
+  it("previews every page and safely removes only stale generated artifacts", async () => {
+    const projectRoot = await copyFixture();
+    const previewDirectory = path.join(projectRoot, "preview");
+    await writeFile(path.join(projectRoot, ".deck-project"), "", "utf8");
+    await mkdir(previewDirectory, { recursive: true });
+    await writeFile(path.join(previewDirectory, "02.png"), "stale");
+    await writeFile(path.join(previewDirectory, "notes.txt"), "user-owned");
+
+    const invocation = await invoke(["preview", projectRoot, "--json"]);
+    const result = jsonResult(invocation.stdout);
+
+    expect(invocation.exitCode).toBe(0);
+    expect(result).toMatchObject({
+      command: "preview",
+      status: "ok",
+      errors: [],
+      details: {
+        pageCount: 1,
+        removedStaleArtifacts: ["preview/02.png"],
+      },
+    });
+    expect(result.outputPaths[0]).toMatch(/preview\/01\.png$/u);
+    expect(await readFile(path.join(previewDirectory, "notes.txt"), "utf8")).toBe(
+      "user-owned",
+    );
+    await expect(access(path.join(previewDirectory, "02.png"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  }, 30_000);
+
+  it("accepts --force only for preview and reports regenerated artifacts", async () => {
+    const projectRoot = await copyFixture();
+    const first = await invoke(["preview", projectRoot, "--json"]);
+    expect(first.exitCode).toBe(0);
+    const forced = await invoke(["preview", projectRoot, "--force", "--json"]);
+    const result = jsonResult(forced.stdout);
+
+    expect(forced.exitCode).toBe(0);
+    expect(result.details).toMatchObject({
+      force: true,
+      removedStaleArtifacts: ["preview/01.png"],
+    });
+
+    const invalid = await invoke(["validate", projectRoot, "--force", "--json"]);
+    expect(jsonResult(invalid.stdout).errors[0]?.code).toBe("CLI_ARGUMENT_INVALID");
+  }, 30_000);
 });

@@ -29,6 +29,9 @@ importers:
       '@deck-agent/renderer-pptx':
         specifier: workspace:*
         version: link:../../packages/renderer-pptx
+      '@deck-agent/renderer-preview':
+        specifier: workspace:*
+        version: link:../../packages/renderer-preview
 
   packages/deck-core:
     dependencies:

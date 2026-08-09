@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import {
   createProjectAssetResolver,
   createProjectOutputWriter,
+  createProjectPreviewWriter,
+  cleanProjectPreviewArtifacts,
   loadDeckProject,
 } from "@deck-agent/deck-core";
 import {
@@ -14,6 +16,7 @@ import {
   type ResolvedTextElement,
 } from "@deck-agent/deck-layout";
 import { renderPptx, verifyPptx } from "@deck-agent/renderer-pptx";
+import { renderPreviewPages } from "@deck-agent/renderer-preview";
 
 export type DeckCommandName = "validate" | "render" | "preview" | "qa";
 
@@ -42,6 +45,7 @@ interface ParsedCommand {
   readonly projectPath: string;
   readonly json: boolean;
   readonly format?: "pptx";
+  readonly force?: boolean;
 }
 
 class CliError extends Error {
@@ -113,6 +117,18 @@ function parseCommand(argv: readonly string[]): ParsedCommand {
     return { command: rawCommand, projectPath, json, format };
   }
 
+  if (rawCommand === "preview") {
+    const forceIndex = args.indexOf("--force");
+    const force = forceIndex >= 0;
+    if (force) {
+      args.splice(forceIndex, 1);
+    }
+    if (args.length > 0) {
+      throw new CliError("CLI_ARGUMENT_INVALID", `Unexpected argument: ${args[0]}`);
+    }
+    return { command: rawCommand, projectPath, json, force };
+  }
+
   if (args.length > 0) {
     throw new CliError("CLI_ARGUMENT_INVALID", `Unexpected argument: ${args[0]}`);
   }
@@ -144,7 +160,7 @@ function successfulResult(
 }
 
 async function executeCommand(command: ParsedCommand): Promise<CliCommandResult> {
-  if (command.command === "preview" || command.command === "qa") {
+  if (command.command === "qa") {
     throw new CliError(
       "CLI_COMMAND_NOT_IMPLEMENTED",
       `${command.command} is implemented by a later Milestone 1 task`,
@@ -164,6 +180,42 @@ async function executeCommand(command: ParsedCommand): Promise<CliCommandResult>
       pageCount: deck.pages.length,
       elementCount,
     });
+  }
+
+  if (command.command === "preview") {
+    const digits = Math.max(2, String(deck.pages.length).length);
+    const expectedPaths = deck.pages.map(
+      (_, index) => `preview/${String(index + 1).padStart(digits, "0")}.png`,
+    );
+    const cleanup = await cleanProjectPreviewArtifacts(root, {
+      expectedPaths,
+      force: command.force ?? false,
+    });
+    const preview = await renderPreviewPages(deck, {
+      assets: createProjectAssetResolver(root),
+      output: createProjectPreviewWriter(root),
+    });
+    return successfulResult(
+      "preview",
+      {
+        projectRoot: root,
+        pageCount: preview.pages.length,
+        outputDirectory:
+          preview.pages[0] === undefined
+            ? undefined
+            : path.dirname(preview.pages[0].absolutePath),
+        force: command.force ?? false,
+        removedStaleArtifacts: cleanup.removedPaths,
+        pages: preview.pages.map((page) => ({
+          pageId: page.pageId,
+          relativePath: page.relativePath,
+          width: page.width,
+          height: page.height,
+          bytesWritten: page.bytesWritten,
+        })),
+      },
+      preview.pages.map((page) => page.absolutePath),
+    );
   }
 
   const rendered = await renderPptx(deck, {
@@ -270,6 +322,9 @@ function humanSummary(result: CliCommandResult): string {
   }
   if (result.command === "validate") {
     return `OK validate: ${String(result.details.pageCount)} page(s), ${String(result.details.elementCount)} element(s)`;
+  }
+  if (result.command === "preview") {
+    return `OK preview: ${String(result.details.pageCount)} page image(s)`;
   }
   return `OK render: ${result.outputPaths[0] ?? "output/deck.pptx"}`;
 }
