@@ -1,8 +1,4 @@
-import type {
-  DeckElement,
-  DeckSize,
-  DeckTheme,
-} from "@deck-agent/deck-schema";
+import type { DeckSize, DeckTheme } from "@deck-agent/deck-schema";
 
 export interface ResolvedBounds {
   readonly x: number;
@@ -11,23 +7,106 @@ export interface ResolvedBounds {
   readonly h: number;
 }
 
-export interface ResolvedElementStyle {
-  readonly color?: string;
-  readonly fill?: string;
-  readonly stroke?: string;
-  readonly strokeWidth?: number;
-  readonly dash?: "solid" | "dash" | "dot";
+export interface ResolvedTextWrap {
+  readonly mode: "word" | "character" | "none";
+  readonly maxLines?: number;
+  readonly overflow: "clip" | "ellipsis" | "shrink";
+}
+
+export interface ResolvedTextContent {
+  readonly value: string;
+}
+
+export interface ResolvedTextStyle {
   readonly fontFamily?: string;
   readonly fontWeight?: number;
   readonly fontStyle?: "normal" | "italic";
+  readonly fontSize: number;
+  readonly color?: string;
+  readonly bold: boolean;
+  readonly alignment: "left" | "center" | "right" | "justify";
+  readonly wrap: ResolvedTextWrap;
 }
 
-export interface ResolvedElement extends ResolvedBounds {
-  readonly id: string;
-  readonly type: DeckElement["type"];
-  readonly content: Readonly<Record<string, unknown>>;
-  readonly style: ResolvedElementStyle;
+export interface ResolvedImageCrop {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
 }
+
+export interface ResolvedImageContent {
+  readonly source: string;
+  readonly fit: "cover" | "contain";
+  readonly crop?: ResolvedImageCrop;
+  readonly alt?: string;
+}
+
+export type ResolvedImageStyle = Readonly<Record<string, never>>;
+
+export interface ResolvedShapeContent {
+  readonly kind: "rectangle" | "ellipse";
+}
+
+export interface ResolvedShapeStyle {
+  readonly fill?: string;
+  readonly stroke?: string;
+  readonly radius: number;
+}
+
+export interface ResolvedPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface ResolvedLineContent {
+  readonly start: ResolvedPoint;
+  readonly end: ResolvedPoint;
+}
+
+export interface ResolvedLineStyle {
+  readonly stroke?: string;
+  readonly width: number;
+  readonly dash: "solid" | "dash" | "dot";
+  readonly arrow: "none" | "start" | "end" | "both";
+}
+
+export interface ResolvedElementBase extends ResolvedBounds {
+  readonly id: string;
+  readonly type: "text" | "image" | "shape" | "line";
+}
+
+export interface ResolvedTextElement extends ResolvedElementBase {
+  readonly type: "text";
+  readonly content: ResolvedTextContent;
+  readonly style: ResolvedTextStyle;
+}
+
+export interface ResolvedImageElement extends ResolvedElementBase {
+  readonly type: "image";
+  readonly content: ResolvedImageContent;
+  readonly style: ResolvedImageStyle;
+}
+
+export interface ResolvedShapeElement extends ResolvedElementBase {
+  readonly type: "shape";
+  readonly content: ResolvedShapeContent;
+  readonly style: ResolvedShapeStyle;
+}
+
+export interface ResolvedLineElement extends ResolvedElementBase {
+  readonly type: "line";
+  readonly content: ResolvedLineContent;
+  readonly style: ResolvedLineStyle;
+}
+
+export type ResolvedElement =
+  | ResolvedTextElement
+  | ResolvedImageElement
+  | ResolvedShapeElement
+  | ResolvedLineElement;
+
+export type ResolvedElementStyle = ResolvedElement["style"];
 
 export interface ResolvedFreeLayout {
   readonly type: "free";

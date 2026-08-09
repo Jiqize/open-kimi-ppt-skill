@@ -59,7 +59,15 @@ describe("deckPageSchema", () => {
           id: "title",
           type: "text",
           slot: "left.title",
-          text: { value: "A title", style: "heading-1" },
+          text: {
+            value: "A title",
+            style: "heading-1",
+            fontSize: 28,
+            color: "foreground",
+            bold: true,
+            alignment: "left",
+            wrap: { mode: "word", maxLines: 2, overflow: "ellipsis" },
+          },
         },
         {
           id: "hero",
@@ -67,6 +75,8 @@ describe("deckPageSchema", () => {
           slot: "right.hero",
           source: "../media/hero.jpg",
           fit: "cover",
+          crop: { x: 0.1, y: 0, w: 0.8, h: 1 },
+          alt: "Hero",
         },
         {
           id: "card",
@@ -75,7 +85,12 @@ describe("deckPageSchema", () => {
           y: 1.4,
           w: 4,
           h: 2,
-          shape: { kind: "rectangle", fill: "accent" },
+          shape: {
+            kind: "rectangle",
+            fill: "accent",
+            stroke: "foreground",
+            radius: "card",
+          },
         },
         {
           id: "divider",
@@ -84,7 +99,13 @@ describe("deckPageSchema", () => {
           y: 1,
           w: 0.01,
           h: 5,
-          line: { color: "muted", width: 1 },
+          line: {
+            start: { x: 0.5, y: 0 },
+            end: { x: 0.5, y: 1 },
+            stroke: "muted",
+            width: 1,
+            arrow: "end",
+          },
         },
       ],
     });
@@ -122,6 +143,70 @@ describe("deckPageSchema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("rejects image crops outside normalized bounds", () => {
+    const result = deckPageSchema.safeParse({
+      id: "page-01",
+      type: "image",
+      layout: { type: "free" },
+      elements: [
+        {
+          id: "hero",
+          type: "image",
+          x: 0,
+          y: 0,
+          w: 10,
+          h: 6,
+          source: "hero.jpg",
+          crop: { x: 0.5, y: 0, w: 0.75, h: 1 },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects unsupported shape kinds", () => {
+    const result = deckPageSchema.safeParse({
+      id: "page-01",
+      type: "shape",
+      layout: { type: "free" },
+      elements: [
+        {
+          id: "triangle",
+          type: "shape",
+          x: 1,
+          y: 1,
+          w: 2,
+          h: 2,
+          shape: { kind: "triangle" },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts ellipse shapes", () => {
+    const result = deckPageSchema.safeParse({
+      id: "page-01",
+      type: "shape",
+      layout: { type: "free" },
+      elements: [
+        {
+          id: "circle",
+          type: "shape",
+          x: 1,
+          y: 1,
+          w: 2,
+          h: 2,
+          shape: { kind: "ellipse", fill: "accent" },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
   });
 });
 

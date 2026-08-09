@@ -11,12 +11,12 @@ import type {
   ResolvedBounds,
   ResolvedDeck,
   ResolvedElement,
-  ResolvedElementStyle,
   ResolvedLayout,
   ResolvedPage,
 } from "./types.js";
 
 const BOUNDS_EPSILON = 1e-9;
+const DEFAULT_TEXT_FONT_SIZE = 18;
 const SPLIT_OPTION_NAMES = new Set(["ratio", "margin", "gap"]);
 
 function invalidLayoutOptions(
@@ -163,40 +163,111 @@ function resolveFontToken(
   return value;
 }
 
+function resolveRadiusToken(
+  theme: DeckTheme | undefined,
+  token: string,
+  page: DeckPage,
+  elementId: string,
+): number {
+  const value = theme?.radius[token];
+  if (value === undefined) {
+    throw new LayoutResolutionError(
+      "THEME_TOKEN_UNRESOLVED",
+      `Radius theme token is not defined: ${token}`,
+      {
+        pageId: page.id,
+        elementId,
+        token,
+        details: { tokenKind: "radius" },
+      },
+    );
+  }
+  return value;
+}
+
 function resolveElementModel(
   element: DeckElement,
   page: DeckPage,
   theme: DeckTheme | undefined,
-): Pick<ResolvedElement, "content" | "style"> {
+  bounds: ResolvedBounds,
+): ResolvedElement {
   switch (element.type) {
     case "text": {
-      let style: ResolvedElementStyle = {};
+      let font: FontToken | undefined;
       if (element.text.style !== undefined) {
-        const font = resolveFontToken(
+        font = resolveFontToken(
           theme,
           element.text.style,
           page,
           element.id,
         );
-        style = {
-          fontFamily: font.family,
-          fontWeight: font.weight,
-          ...(font.style === undefined ? {} : { fontStyle: font.style }),
-        };
       }
-      return { content: { value: element.text.value }, style };
+
+      return {
+        id: element.id,
+        type: "text",
+        ...bounds,
+        content: { value: element.text.value },
+        style: {
+          ...(font === undefined
+            ? {}
+            : {
+                fontFamily: font.family,
+                fontWeight: font.weight,
+                ...(font.style === undefined
+                  ? {}
+                  : { fontStyle: font.style }),
+              }),
+          fontSize: element.text.fontSize ?? DEFAULT_TEXT_FONT_SIZE,
+          ...(element.text.color === undefined
+            ? {}
+            : {
+                color: resolveColorToken(
+                  theme,
+                  element.text.color,
+                  page,
+                  element.id,
+                ),
+              }),
+          bold: element.text.bold ?? (font?.weight ?? 400) >= 700,
+          alignment: element.text.alignment ?? "left",
+          wrap: {
+            mode: element.text.wrap?.mode ?? "word",
+            ...(element.text.wrap?.maxLines === undefined
+              ? {}
+              : { maxLines: element.text.wrap.maxLines }),
+            overflow: element.text.wrap?.overflow ?? "clip",
+          },
+        },
+      };
     }
     case "image":
       return {
+        id: element.id,
+        type: "image",
+        ...bounds,
         content: {
           source: element.source,
           fit: element.fit ?? "contain",
+          ...(element.crop === undefined ? {} : { crop: { ...element.crop } }),
           ...(element.alt === undefined ? {} : { alt: element.alt }),
         },
         style: {},
       };
-    case "shape":
+    case "shape": {
+      const radius =
+        typeof element.shape.radius === "string"
+          ? resolveRadiusToken(
+              theme,
+              element.shape.radius,
+              page,
+              element.id,
+            )
+          : (element.shape.radius ?? 0);
       return {
+        id: element.id,
+        type: "shape",
+        ...bounds,
         content: { kind: element.shape.kind },
         style: {
           ...(element.shape.fill === undefined
@@ -219,26 +290,39 @@ function resolveElementModel(
                   element.id,
                 ),
               }),
+          radius,
         },
       };
+    }
     case "line":
       return {
-        content: {},
+        id: element.id,
+        type: "line",
+        ...bounds,
+        content: {
+          start: {
+            x: bounds.x + element.line.start.x * bounds.w,
+            y: bounds.y + element.line.start.y * bounds.h,
+          },
+          end: {
+            x: bounds.x + element.line.end.x * bounds.w,
+            y: bounds.y + element.line.end.y * bounds.h,
+          },
+        },
         style: {
-          ...(element.line.color === undefined
+          ...(element.line.stroke === undefined
             ? {}
             : {
                 stroke: resolveColorToken(
                   theme,
-                  element.line.color,
+                  element.line.stroke,
                   page,
                   element.id,
                 ),
               }),
-          ...(element.line.width === undefined
-            ? {}
-            : { strokeWidth: element.line.width }),
-          ...(element.line.dash === undefined ? {} : { dash: element.line.dash }),
+          width: element.line.width ?? 1,
+          dash: element.line.dash ?? "solid",
+          arrow: element.line.arrow ?? "none",
         },
       };
   }
@@ -404,14 +488,7 @@ function resolvePage(
       project.manifest.size.width,
       project.manifest.size.height,
     );
-    const model = resolveElementModel(element, page, project.theme);
-    return {
-      id: element.id,
-      type: element.type,
-      ...bounds,
-      content: model.content,
-      style: model.style,
-    } satisfies ResolvedElement;
+    return resolveElementModel(element, page, project.theme, bounds);
   });
 
   return {
@@ -456,4 +533,3 @@ export function resolveDeck(project: DeckProject): ResolvedDeck {
     pages: project.pages.map((page) => resolvePage(page, project)),
   };
 }
-
