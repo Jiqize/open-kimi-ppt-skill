@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { access, cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,7 +33,7 @@ afterEach(async () => {
 
 describe("Task 10 canonical Golden Decks", () => {
   for (const deckName of goldenDecks) {
-    it(`${deckName} validates and renders through the public CLI`, async () => {
+    it(`${deckName} validates, renders, previews, and passes QA`, async () => {
       const temporaryRoot = await mkdtemp(path.join(tmpdir(), "deck-golden-"));
       temporaryRoots.push(temporaryRoot);
       const projectRoot = path.join(temporaryRoot, deckName);
@@ -47,10 +47,17 @@ describe("Task 10 canonical Golden Decks", () => {
         "pptx",
         "--json",
       ]);
+      const preview = await invoke(["preview", projectRoot, "--json"]);
+      const qa = await invoke(["qa", projectRoot, "--json"]);
 
       expect(validation).toMatchObject({ status: "ok", errors: [] });
       expect(render).toMatchObject({ status: "ok", errors: [] });
+      expect(preview).toMatchObject({ status: "ok", errors: [] });
+      expect(qa).toMatchObject({ status: "ok", errors: [] });
       expect(render.outputPaths[0]).toMatch(/output\/deck\.pptx$/u);
-    });
+      expect(preview.outputPaths.at(-1)).toMatch(/preview\/overview\.jpg$/u);
+      expect(preview.details.pageLabels).toBeDefined();
+      await access(path.join(projectRoot, "reports/qa.json"));
+    }, 30_000);
   }
 });

@@ -157,6 +157,14 @@ describe("Task 09 CLI validate and render", () => {
       },
     });
     expect(result.outputPaths[0]).toMatch(/preview\/01\.png$/u);
+    expect(result.outputPaths[1]).toMatch(/preview\/overview\.jpg$/u);
+    expect(result.details.pageLabels).toMatchObject({
+      P1: {
+        pageId: "page-01",
+        sourcePath: "pages/01-elements.yaml",
+        imagePath: "preview/01.png",
+      },
+    });
     expect(await readFile(path.join(previewDirectory, "notes.txt"), "utf8")).toBe(
       "user-owned",
     );
@@ -175,7 +183,7 @@ describe("Task 09 CLI validate and render", () => {
     expect(forced.exitCode).toBe(0);
     expect(result.details).toMatchObject({
       force: true,
-      removedStaleArtifacts: ["preview/01.png"],
+      removedStaleArtifacts: ["preview/01.png", "preview/overview.jpg"],
     });
 
     const invalid = await invoke(["validate", projectRoot, "--force", "--json"]);

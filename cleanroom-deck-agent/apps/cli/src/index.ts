@@ -22,7 +22,10 @@ import {
   type QaIssue,
 } from "@deck-agent/deck-qa";
 import { renderPptx, verifyPptx } from "@deck-agent/renderer-pptx";
-import { renderPreviewPages } from "@deck-agent/renderer-preview";
+import {
+  renderPreviewOverview,
+  renderPreviewPages,
+} from "@deck-agent/renderer-preview";
 
 export type DeckCommandName = "validate" | "render" | "preview" | "qa";
 
@@ -145,9 +148,14 @@ function parseCommand(argv: readonly string[]): ParsedCommand {
 async function loadResolvedProject(projectPath: string): Promise<{
   readonly root: string;
   readonly deck: ResolvedDeck;
+  readonly pageSourcePaths: readonly string[];
 }> {
   const project = await loadDeckProject(projectPath);
-  return { root: project.root, deck: resolveDeck(project) };
+  return {
+    root: project.root,
+    deck: resolveDeck(project),
+    pageSourcePaths: project.manifest.pages,
+  };
 }
 
 function successfulResult(
@@ -166,7 +174,9 @@ function successfulResult(
 }
 
 async function executeCommand(command: ParsedCommand): Promise<CliCommandResult> {
-  const { root, deck } = await loadResolvedProject(command.projectPath);
+  const { root, deck, pageSourcePaths } = await loadResolvedProject(
+    command.projectPath,
+  );
   const elementCount = deck.pages.reduce(
     (count, page) => count + page.elements.length,
     0,
@@ -182,17 +192,36 @@ async function executeCommand(command: ParsedCommand): Promise<CliCommandResult>
 
   if (command.command === "preview") {
     const digits = Math.max(2, String(deck.pages.length).length);
-    const expectedPaths = deck.pages.map(
+    const pagePaths = deck.pages.map(
       (_, index) => `preview/${String(index + 1).padStart(digits, "0")}.png`,
     );
+    const expectedPaths = [...pagePaths, "preview/overview.jpg"];
     const cleanup = await cleanProjectPreviewArtifacts(root, {
       expectedPaths,
       force: command.force ?? false,
     });
-    const preview = await renderPreviewPages(deck, {
-      assets: createProjectAssetResolver(root),
-      output: createProjectPreviewWriter(root),
+    const assets = createProjectAssetResolver(root);
+    const output = createProjectPreviewWriter(root);
+    const preview = await renderPreviewPages(deck, { assets, output });
+    const overviewPages = preview.pages.map((page, index) => ({
+      label: `P${String(index + 1)}`,
+      pageId: page.pageId,
+      imageSource: page.relativePath,
+    }));
+    const overview = await renderPreviewOverview(deck, overviewPages, {
+      assets,
+      output,
     });
+    const pageLabels = Object.fromEntries(
+      preview.pages.map((page, index) => [
+        `P${String(index + 1)}`,
+        {
+          pageId: page.pageId,
+          sourcePath: pageSourcePaths[index],
+          imagePath: page.relativePath,
+        },
+      ]),
+    );
     return successfulResult(
       "preview",
       {
@@ -200,19 +229,31 @@ async function executeCommand(command: ParsedCommand): Promise<CliCommandResult>
         pageCount: preview.pages.length,
         outputDirectory:
           preview.pages[0] === undefined
-            ? undefined
+            ? path.dirname(overview.absolutePath)
             : path.dirname(preview.pages[0].absolutePath),
         force: command.force ?? false,
         removedStaleArtifacts: cleanup.removedPaths,
-        pages: preview.pages.map((page) => ({
+        pages: preview.pages.map((page, index) => ({
+          label: `P${String(index + 1)}`,
           pageId: page.pageId,
+          sourcePath: pageSourcePaths[index],
           relativePath: page.relativePath,
           width: page.width,
           height: page.height,
           bytesWritten: page.bytesWritten,
         })),
+        overview: {
+          relativePath: overview.relativePath,
+          width: overview.width,
+          height: overview.height,
+          bytesWritten: overview.bytesWritten,
+        },
+        pageLabels,
       },
-      preview.pages.map((page) => page.absolutePath),
+      [
+        ...preview.pages.map((page) => page.absolutePath),
+        overview.absolutePath,
+      ],
     );
   }
 

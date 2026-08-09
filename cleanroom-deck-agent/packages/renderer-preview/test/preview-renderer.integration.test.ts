@@ -15,7 +15,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   renderPreview,
+  renderPreviewOverview,
   renderPreviewPages,
+  type PreviewOverviewRenderResult,
   type PreviewPagesRenderResult,
   type PreviewRenderResult,
 } from "../src/preview-renderer.js";
@@ -42,6 +44,7 @@ let imageHeavy: GoldenRender;
 let businessPptx: PptxRenderResult;
 let businessDeckBeforeRendering: string;
 let minimalPages: PreviewPagesRenderResult;
+let minimalOverview: PreviewOverviewRenderResult;
 
 async function removeTemporaryDirectory(directory: string): Promise<void> {
   const relative = path.relative(tmpdir(), directory);
@@ -102,10 +105,23 @@ beforeAll(async () => {
   const minimalRoot = path.join(temporaryRoot, "minimal-report");
   await cp(minimalSource, minimalRoot, { recursive: true });
   const minimalProject = await loadDeckProject(minimalRoot);
-  minimalPages = await renderPreviewPages(resolveDeck(minimalProject), {
+  const minimalDeck = resolveDeck(minimalProject);
+  const minimalContext = {
     assets: createProjectAssetResolver(minimalRoot),
     output: createProjectPreviewWriter(minimalRoot),
-  });
+  };
+  minimalPages = await renderPreviewPages(minimalDeck, minimalContext);
+  minimalOverview = await renderPreviewOverview(
+    minimalDeck,
+    [
+      {
+        label: "P1",
+        pageId: minimalDeck.pages[0]?.id as string,
+        imageSource: "preview/01.png",
+      },
+    ],
+    minimalContext,
+  );
 }, 60_000);
 
 afterAll(async () => {
@@ -116,6 +132,15 @@ describe("Task 09 Preview renderer integration", () => {
   it("offers a page-only API for the canonical Task 12 contract", async () => {
     expect(minimalPages.pages).toHaveLength(1);
     expect(minimalPages.pages[0]?.relativePath).toBe("preview/01.png");
+    expect(minimalOverview.relativePath).toBe("preview/overview.jpg");
+    expect(minimalOverview).toMatchObject({
+      width: 408,
+      height: 287,
+      pages: [{ label: "P1", pageId: "minimal-summary" }],
+    });
+    const jpeg = new Uint8Array(await readFile(minimalOverview.absolutePath));
+    expect(Array.from(jpeg.slice(0, 3))).toEqual([0xff, 0xd8, 0xff]);
+    expect(minimalOverview.bytesWritten).toBeGreaterThan(1_000);
     await expect(
       readFile(path.join(temporaryRoot, "minimal-report/preview/overview.png")),
     ).rejects.toMatchObject({ code: "ENOENT" });

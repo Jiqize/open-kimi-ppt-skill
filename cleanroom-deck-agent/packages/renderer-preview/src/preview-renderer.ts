@@ -16,11 +16,14 @@ import {
 } from "./svg-renderer.js";
 
 const PIXELS_PER_INCH = 96;
-const OVERVIEW_COLUMNS = 2;
+const LEGACY_OVERVIEW_COLUMNS = 2;
+const CANONICAL_OVERVIEW_COLUMNS = 3;
 const OVERVIEW_GAP = 24;
 const OVERVIEW_PADDING = 24;
-const OVERVIEW_LABEL_HEIGHT = 32;
-const OVERVIEW_THUMBNAIL_WIDTH = 480;
+const LEGACY_OVERVIEW_LABEL_HEIGHT = 32;
+const LEGACY_OVERVIEW_THUMBNAIL_WIDTH = 480;
+const CANONICAL_OVERVIEW_LABEL_HEIGHT = 36;
+const CANONICAL_OVERVIEW_THUMBNAIL_WIDTH = 360;
 
 export interface PreviewRendererContext {
   readonly assets: AssetResolver;
@@ -40,6 +43,18 @@ export interface PreviewRenderResult {
 
 export interface PreviewPagesRenderResult {
   readonly pages: readonly PreviewPageRenderResult[];
+}
+
+export interface PreviewOverviewPage {
+  readonly label: string;
+  readonly pageId: string;
+  readonly imageSource: string;
+}
+
+export interface PreviewOverviewRenderResult extends ProjectPreviewWriteResult {
+  readonly width: number;
+  readonly height: number;
+  readonly pages: readonly PreviewOverviewPage[];
 }
 
 interface InternalPreviewRenderResult extends PreviewPagesRenderResult {
@@ -93,17 +108,19 @@ function overviewGeometry(
   pageCount: number,
   slideAspect: number,
 ): Readonly<{ width: number; height: number; thumbnailHeight: number }> {
-  const columns = Math.max(1, Math.min(OVERVIEW_COLUMNS, pageCount));
+  const columns = Math.max(1, Math.min(LEGACY_OVERVIEW_COLUMNS, pageCount));
   const rows = Math.max(1, Math.ceil(pageCount / columns));
-  const thumbnailHeight = Math.round(OVERVIEW_THUMBNAIL_WIDTH / slideAspect);
+  const thumbnailHeight = Math.round(
+    LEGACY_OVERVIEW_THUMBNAIL_WIDTH / slideAspect,
+  );
   return {
     width:
       OVERVIEW_PADDING * 2 +
-      columns * OVERVIEW_THUMBNAIL_WIDTH +
+      columns * LEGACY_OVERVIEW_THUMBNAIL_WIDTH +
       (columns - 1) * OVERVIEW_GAP,
     height:
       OVERVIEW_PADDING * 2 +
-      rows * (thumbnailHeight + OVERVIEW_LABEL_HEIGHT) +
+      rows * (thumbnailHeight + LEGACY_OVERVIEW_LABEL_HEIGHT) +
       (rows - 1) * OVERVIEW_GAP,
     thumbnailHeight,
   };
@@ -113,7 +130,10 @@ function overviewDocument(
   pages: readonly ResolvedPageSvg[],
   thumbnailHeight: number,
 ): string {
-  const columns = Math.max(1, Math.min(OVERVIEW_COLUMNS, pages.length));
+  const columns = Math.max(
+    1,
+    Math.min(LEGACY_OVERVIEW_COLUMNS, pages.length),
+  );
   const cards =
     pages.length === 0
       ? '<div class="empty">No pages</div>'
@@ -135,12 +155,80 @@ function overviewDocument(
     "*{box-sizing:border-box}",
     `html,body{margin:0;padding:0;background:#E8EBF0;font-family:Arial,sans-serif}`,
     `body{padding:${String(OVERVIEW_PADDING)}px}`,
-    `.grid{display:grid;grid-template-columns:repeat(${String(columns)},${String(OVERVIEW_THUMBNAIL_WIDTH)}px);gap:${String(OVERVIEW_GAP)}px}`,
+    `.grid{display:grid;grid-template-columns:repeat(${String(columns)},${String(LEGACY_OVERVIEW_THUMBNAIL_WIDTH)}px);gap:${String(OVERVIEW_GAP)}px}`,
     ".card{min-width:0}",
-    ".slide{width:480px;background:white;box-shadow:0 2px 12px rgba(16,24,40,.18);overflow:hidden}",
+    `.slide{width:${String(LEGACY_OVERVIEW_THUMBNAIL_WIDTH)}px;background:white;box-shadow:0 2px 12px rgba(16,24,40,.18);overflow:hidden}`,
     ".slide svg{display:block;width:100%;height:100%}",
-    `.label{height:${String(OVERVIEW_LABEL_HEIGHT)}px;padding-top:9px;color:#344054;font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`,
+    `.label{height:${String(LEGACY_OVERVIEW_LABEL_HEIGHT)}px;padding-top:9px;color:#344054;font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`,
     ".empty{color:#475467;font-size:16px}",
+    "</style></head><body>",
+    `<div class="grid">${cards}</div>`,
+    "</body></html>",
+  ].join("");
+}
+
+function canonicalOverviewGeometry(
+  pageCount: number,
+  slideAspect: number,
+): Readonly<{
+  width: number;
+  height: number;
+  thumbnailHeight: number;
+  columns: number;
+}> {
+  const columns = Math.max(
+    1,
+    Math.min(CANONICAL_OVERVIEW_COLUMNS, pageCount),
+  );
+  const rows = Math.max(1, Math.ceil(pageCount / columns));
+  const thumbnailHeight = Math.round(
+    CANONICAL_OVERVIEW_THUMBNAIL_WIDTH / slideAspect,
+  );
+  return {
+    width:
+      OVERVIEW_PADDING * 2 +
+      columns * CANONICAL_OVERVIEW_THUMBNAIL_WIDTH +
+      (columns - 1) * OVERVIEW_GAP,
+    height:
+      OVERVIEW_PADDING * 2 +
+      rows * (thumbnailHeight + CANONICAL_OVERVIEW_LABEL_HEIGHT) +
+      (rows - 1) * OVERVIEW_GAP,
+    thumbnailHeight,
+    columns,
+  };
+}
+
+interface LoadedOverviewPage extends PreviewOverviewPage {
+  readonly dataUri: string;
+}
+
+function canonicalOverviewDocument(
+  pages: readonly LoadedOverviewPage[],
+  geometry: ReturnType<typeof canonicalOverviewGeometry>,
+): string {
+  const cards = pages
+    .map(
+      ({ dataUri, label, pageId }) => [
+        '<div class="card">',
+        `<img class="slide" src="${escapeHtml(dataUri)}" alt="${escapeHtml(pageId)}"/>`,
+        `<div class="label"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(pageId)}</span></div>`,
+        "</div>",
+      ].join(""),
+    )
+    .join("");
+  return [
+    "<!doctype html>",
+    '<html><head><meta charset="utf-8"/>',
+    "<style>",
+    "*{box-sizing:border-box}",
+    "html,body{margin:0;padding:0;background:#F2F4F7;font-family:Arial,sans-serif}",
+    `body{padding:${String(OVERVIEW_PADDING)}px}`,
+    `.grid{display:grid;grid-template-columns:repeat(${String(geometry.columns)},${String(CANONICAL_OVERVIEW_THUMBNAIL_WIDTH)}px);gap:${String(OVERVIEW_GAP)}px}`,
+    ".card{min-width:0}",
+    `.slide{display:block;width:${String(CANONICAL_OVERVIEW_THUMBNAIL_WIDTH)}px;height:${String(geometry.thumbnailHeight)}px;object-fit:fill;background:#FFFFFF;box-shadow:0 2px 12px rgba(16,24,40,.18)}`,
+    `.label{height:${String(CANONICAL_OVERVIEW_LABEL_HEIGHT)}px;display:flex;align-items:center;gap:9px;color:#000000;font-size:13px;line-height:18px;white-space:nowrap;overflow:hidden}`,
+    ".label strong{font-size:14px;color:#000000}",
+    ".label span{overflow:hidden;text-overflow:ellipsis;color:#344054}",
     "</style></head><body>",
     `<div class="grid">${cards}</div>`,
     "</body></html>",
@@ -155,11 +243,27 @@ async function setDeterministicContent(
   await page.setViewportSize(viewport);
   await page.setContent(html, { waitUntil: "load" });
   await page.evaluate("document.fonts.ready");
+  await page.evaluate(
+    "Promise.all(Array.from(document.images, image => image.decode()))",
+  );
 }
 
 async function screenshot(page: Page): Promise<Uint8Array> {
   const data = await page.screenshot({
     type: "png",
+    animations: "disabled",
+    caret: "hide",
+    fullPage: false,
+    omitBackground: false,
+    scale: "css",
+  });
+  return new Uint8Array(data);
+}
+
+async function screenshotJpeg(page: Page): Promise<Uint8Array> {
+  const data = await page.screenshot({
+    type: "jpeg",
+    quality: 90,
     animations: "disabled",
     caret: "hide",
     fullPage: false,
@@ -326,4 +430,86 @@ export function renderPreviewPages(
   context: PreviewRendererContext,
 ): Promise<PreviewPagesRenderResult> {
   return new PreviewRenderer(context).renderPages(deck);
+}
+
+export async function renderPreviewOverview(
+  deck: ResolvedDeck,
+  pages: readonly PreviewOverviewPage[],
+  context: PreviewRendererContext,
+): Promise<PreviewOverviewRenderResult> {
+  if (
+    pages.length !== deck.pages.length ||
+    pages.some(
+      (page, index) =>
+        page.label !== `P${String(index + 1)}` ||
+        page.pageId !== deck.pages[index]?.id,
+    )
+  ) {
+    throw new PreviewRenderError(
+      "PREVIEW_OVERVIEW_INVALID",
+      "Overview pages must match Resolved Deck order with P1, P2, … labels",
+      {
+        resolvedPageIds: deck.pages.map((page) => page.id),
+        overviewPages: pages,
+      },
+    );
+  }
+
+  const loadedPages: LoadedOverviewPage[] = [];
+  for (const page of pages) {
+    const asset = await context.assets.resolve(page.imageSource);
+    if (asset.kind === "remote") {
+      throw new PreviewRenderError(
+        "PREVIEW_OVERVIEW_INVALID",
+        "Overview page images must be local generated preview artifacts",
+        { label: page.label, source: page.imageSource },
+      );
+    }
+    const image = await context.assets.readImage(asset);
+    loadedPages.push({
+      ...page,
+      dataUri: `data:${image.mimeType};base64,${Buffer.from(image.data).toString("base64")}`,
+    });
+  }
+
+  const geometry = canonicalOverviewGeometry(
+    pages.length,
+    deck.size.width / deck.size.height,
+  );
+  const browser = await createBrowser();
+  let browserContext: BrowserContext | undefined;
+  try {
+    browserContext = await createBrowserContext(browser);
+    const browserPage = await browserContext.newPage();
+    await setDeterministicContent(
+      browserPage,
+      canonicalOverviewDocument(loadedPages, geometry),
+      { width: geometry.width, height: geometry.height },
+    );
+    const data = await screenshotJpeg(browserPage);
+    const written = await context.output.write("preview/overview.jpg", data);
+    return {
+      ...written,
+      width: geometry.width,
+      height: geometry.height,
+      pages: pages.map((page) => ({ ...page })),
+    };
+  } catch (error) {
+    if (
+      error instanceof PreviewRenderError ||
+      error instanceof AssetResolutionError ||
+      error instanceof ProjectPreviewError ||
+      error instanceof WorkspaceSafetyError
+    ) {
+      throw error;
+    }
+    throw new PreviewRenderError(
+      "PREVIEW_SCREENSHOT_FAILED",
+      "Playwright could not render the preview overview",
+      { message: error instanceof Error ? error.message : String(error) },
+    );
+  } finally {
+    await browserContext?.close();
+    await browser.close();
+  }
 }
