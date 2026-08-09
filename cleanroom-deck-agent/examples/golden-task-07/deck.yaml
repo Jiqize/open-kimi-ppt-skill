@@ -1,0 +1,9 @@
+version: 1
+id: golden-task-07
+title: Task 07 Editable Elements
+size:
+  width: 10
+  height: 6
+theme: themes/task-07.yaml
+pages:
+  - pages/01-elements.yaml

@@ -1,0 +1,19 @@
+name: task-07
+colors:
+  background: "#F4F7FF"
+  surface: "#FFFFFF"
+  foreground: "#172033"
+  muted: "#56627A"
+  accent: "#3157F6"
+fonts:
+  heading:
+    family: Arial
+    weight: 700
+  body:
+    family: Arial
+    weight: 400
+spacing:
+  pageMargin: 0.6
+  grid: 0.1
+radius:
+  card: 0.12

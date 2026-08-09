@@ -61,6 +61,7 @@ describe("createProjectAssetResolver", () => {
     expect(Array.from(await resolver.read(asset))).toEqual(Array.from(imageBytes));
     await expect(resolver.readImage(asset)).resolves.toMatchObject({
       asset,
+      mimeType: "image/png",
       dimensions: { width: 1, height: 1 },
     });
   });

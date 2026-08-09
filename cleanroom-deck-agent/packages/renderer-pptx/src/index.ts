@@ -1,2 +1,3 @@
-export const packageName = "@deck-agent/renderer-pptx";
-
+export * from "./errors.js";
+export * from "./pptx-renderer.js";
+export * from "./validation.js";

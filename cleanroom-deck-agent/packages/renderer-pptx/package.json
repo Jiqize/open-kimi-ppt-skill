@@ -3,6 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@deck-agent/deck-core": "workspace:*",
+    "@deck-agent/deck-layout": "workspace:*",
+    "fflate": "0.8.3",
+    "pptxgenjs": "4.0.1"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -10,4 +16,3 @@
     }
   }
 }
-

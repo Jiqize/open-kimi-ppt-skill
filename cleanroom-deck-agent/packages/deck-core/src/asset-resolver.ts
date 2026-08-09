@@ -33,6 +33,7 @@ export interface LoadedImageAsset {
   readonly asset: ResolvedLocalAsset;
   readonly data: Uint8Array;
   readonly dimensions: ImageDimensions;
+  readonly mimeType: string;
 }
 
 export interface AssetResolver {
@@ -87,6 +88,16 @@ const MIME_TYPES = new Map<string, string>([
   [".tif", "image/tiff"],
   [".tiff", "image/tiff"],
   [".webp", "image/webp"],
+]);
+
+const DETECTED_IMAGE_MIME_TYPES = new Map<string, string>([
+  ["bmp", "image/bmp"],
+  ["gif", "image/gif"],
+  ["jpg", "image/jpeg"],
+  ["png", "image/png"],
+  ["svg", "image/svg+xml"],
+  ["tiff", "image/tiff"],
+  ["webp", "image/webp"],
 ]);
 
 function mimeTypeForPath(inputPath: string): string | undefined {
@@ -218,9 +229,18 @@ export function createProjectAssetResolver(projectRoot: string): AssetResolver {
         ) {
           throw new Error("Image dimensions must be positive finite numbers");
         }
+        const mimeType =
+          (dimensions.type === undefined
+            ? undefined
+            : DETECTED_IMAGE_MIME_TYPES.get(dimensions.type)) ??
+          asset.mimeType;
+        if (mimeType === undefined) {
+          throw new Error("Image MIME type could not be determined");
+        }
         return {
           asset,
           data,
+          mimeType,
           dimensions: {
             width: dimensions.width,
             height: dimensions.height,
