@@ -1,0 +1,10 @@
+version: 1
+id: golden-preview-business-report
+title: Business Report Preview
+size:
+  width: 10
+  height: 5.625
+theme: themes/report.yaml
+pages:
+  - pages/01-cover.yaml
+  - pages/02-summary.yaml

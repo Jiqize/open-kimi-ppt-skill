@@ -1,0 +1,290 @@
+import {
+  AssetResolutionError,
+  ProjectPreviewError,
+  WorkspaceSafetyError,
+  type AssetResolver,
+  type ProjectPreviewWriteResult,
+  type ProjectPreviewWriter,
+} from "@deck-agent/deck-core";
+import type { ResolvedDeck } from "@deck-agent/deck-layout";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+
+import { PreviewRenderError } from "./errors.js";
+import {
+  renderResolvedPageSvg,
+  type ResolvedPageSvg,
+} from "./svg-renderer.js";
+
+const PIXELS_PER_INCH = 96;
+const OVERVIEW_COLUMNS = 2;
+const OVERVIEW_GAP = 24;
+const OVERVIEW_PADDING = 24;
+const OVERVIEW_LABEL_HEIGHT = 32;
+const OVERVIEW_THUMBNAIL_WIDTH = 480;
+
+export interface PreviewRendererContext {
+  readonly assets: AssetResolver;
+  readonly output: ProjectPreviewWriter;
+}
+
+export interface PreviewPageRenderResult extends ProjectPreviewWriteResult {
+  readonly pageId: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface PreviewRenderResult {
+  readonly pages: readonly PreviewPageRenderResult[];
+  readonly overview: ProjectPreviewWriteResult;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function pixelDimensions(deck: ResolvedDeck): Readonly<{
+  width: number;
+  height: number;
+}> {
+  const width = Math.round(deck.size.width * PIXELS_PER_INCH);
+  const height = Math.round(deck.size.height * PIXELS_PER_INCH);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    throw new PreviewRenderError(
+      "PREVIEW_DIMENSIONS_INVALID",
+      "Resolved Deck has invalid preview dimensions",
+      { size: deck.size, pixelsPerInch: PIXELS_PER_INCH },
+    );
+  }
+  return { width, height };
+}
+
+function pageDocument(svg: string): string {
+  return [
+    "<!doctype html>",
+    '<html><head><meta charset="utf-8"/>',
+    "<style>",
+    "html,body{margin:0;padding:0;overflow:hidden;background:transparent}",
+    "svg{display:block}",
+    "</style></head><body>",
+    svg,
+    "</body></html>",
+  ].join("");
+}
+
+function overviewGeometry(
+  pageCount: number,
+  slideAspect: number,
+): Readonly<{ width: number; height: number; thumbnailHeight: number }> {
+  const columns = Math.max(1, Math.min(OVERVIEW_COLUMNS, pageCount));
+  const rows = Math.max(1, Math.ceil(pageCount / columns));
+  const thumbnailHeight = Math.round(OVERVIEW_THUMBNAIL_WIDTH / slideAspect);
+  return {
+    width:
+      OVERVIEW_PADDING * 2 +
+      columns * OVERVIEW_THUMBNAIL_WIDTH +
+      (columns - 1) * OVERVIEW_GAP,
+    height:
+      OVERVIEW_PADDING * 2 +
+      rows * (thumbnailHeight + OVERVIEW_LABEL_HEIGHT) +
+      (rows - 1) * OVERVIEW_GAP,
+    thumbnailHeight,
+  };
+}
+
+function overviewDocument(
+  pages: readonly ResolvedPageSvg[],
+  thumbnailHeight: number,
+): string {
+  const columns = Math.max(1, Math.min(OVERVIEW_COLUMNS, pages.length));
+  const cards =
+    pages.length === 0
+      ? '<div class="empty">No pages</div>'
+      : pages
+          .map(
+            ({ pageId, svg }, index) => [
+              '<div class="card">',
+              `<div class="slide" style="height:${String(thumbnailHeight)}px">${svg}</div>`,
+              `<div class="label">${String(index + 1).padStart(2, "0")} · ${escapeHtml(pageId)}</div>`,
+              "</div>",
+            ].join(""),
+          )
+          .join("");
+
+  return [
+    "<!doctype html>",
+    '<html><head><meta charset="utf-8"/>',
+    "<style>",
+    "*{box-sizing:border-box}",
+    `html,body{margin:0;padding:0;background:#E8EBF0;font-family:Arial,sans-serif}`,
+    `body{padding:${String(OVERVIEW_PADDING)}px}`,
+    `.grid{display:grid;grid-template-columns:repeat(${String(columns)},${String(OVERVIEW_THUMBNAIL_WIDTH)}px);gap:${String(OVERVIEW_GAP)}px}`,
+    ".card{min-width:0}",
+    ".slide{width:480px;background:white;box-shadow:0 2px 12px rgba(16,24,40,.18);overflow:hidden}",
+    ".slide svg{display:block;width:100%;height:100%}",
+    `.label{height:${String(OVERVIEW_LABEL_HEIGHT)}px;padding-top:9px;color:#344054;font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`,
+    ".empty{color:#475467;font-size:16px}",
+    "</style></head><body>",
+    `<div class="grid">${cards}</div>`,
+    "</body></html>",
+  ].join("");
+}
+
+async function setDeterministicContent(
+  page: Page,
+  html: string,
+  viewport: Readonly<{ width: number; height: number }>,
+): Promise<void> {
+  await page.setViewportSize(viewport);
+  await page.setContent(html, { waitUntil: "load" });
+  await page.evaluate("document.fonts.ready");
+}
+
+async function screenshot(page: Page): Promise<Uint8Array> {
+  const data = await page.screenshot({
+    type: "png",
+    animations: "disabled",
+    caret: "hide",
+    fullPage: false,
+    omitBackground: false,
+    scale: "css",
+  });
+  return new Uint8Array(data);
+}
+
+async function createBrowser(): Promise<Browser> {
+  let bundledError: unknown;
+  try {
+    return await chromium.launch({ headless: true });
+  } catch (error) {
+    bundledError = error;
+  }
+
+  try {
+    // A checked-in Playwright dependency remains the driver. This fallback
+    // lets development environments use an existing stable Chrome channel
+    // when the optional Playwright browser bundle has not been provisioned.
+    return await chromium.launch({ channel: "chrome", headless: true });
+  } catch (channelError) {
+    throw new PreviewRenderError(
+      "PREVIEW_BROWSER_UNAVAILABLE",
+      "Could not launch the project Playwright Chromium browser",
+      {
+        bundledMessage:
+          bundledError instanceof Error
+            ? bundledError.message
+            : String(bundledError),
+        channelMessage:
+          channelError instanceof Error
+            ? channelError.message
+            : String(channelError),
+      },
+    );
+  }
+}
+
+async function createBrowserContext(browser: Browser): Promise<BrowserContext> {
+  return browser.newContext({
+    colorScheme: "light",
+    deviceScaleFactor: 1,
+    locale: "en-US",
+    offline: true,
+    reducedMotion: "reduce",
+  });
+}
+
+export class PreviewRenderer {
+  readonly #context: PreviewRendererContext;
+
+  constructor(context: PreviewRendererContext) {
+    this.#context = context;
+  }
+
+  async render(deck: ResolvedDeck): Promise<PreviewRenderResult> {
+    const dimensions = pixelDimensions(deck);
+    const resolvedPages: ResolvedPageSvg[] = [];
+    for (const page of deck.pages) {
+      resolvedPages.push(
+        await renderResolvedPageSvg(page, deck.size, this.#context.assets),
+      );
+    }
+
+    const browser = await createBrowser();
+    let browserContext: BrowserContext | undefined;
+    try {
+      browserContext = await createBrowserContext(browser);
+      const browserPage = await browserContext.newPage();
+      const pageResults: PreviewPageRenderResult[] = [];
+      const digits = Math.max(2, String(resolvedPages.length).length);
+
+      for (const [index, resolvedPage] of resolvedPages.entries()) {
+        await setDeterministicContent(
+          browserPage,
+          pageDocument(resolvedPage.svg),
+          dimensions,
+        );
+        const data = await screenshot(browserPage);
+        const relativePath = `preview/${String(index + 1).padStart(digits, "0")}.png`;
+        const written = await this.#context.output.write(relativePath, data);
+        pageResults.push({
+          pageId: resolvedPage.pageId,
+          width: dimensions.width,
+          height: dimensions.height,
+          ...written,
+        });
+      }
+
+      const overview = overviewGeometry(
+        resolvedPages.length,
+        deck.size.width / deck.size.height,
+      );
+      await setDeterministicContent(
+        browserPage,
+        overviewDocument(resolvedPages, overview.thumbnailHeight),
+        { width: overview.width, height: overview.height },
+      );
+      const overviewData = await screenshot(browserPage);
+      const overviewResult = await this.#context.output.write(
+        "preview/overview.png",
+        overviewData,
+      );
+
+      return { pages: pageResults, overview: overviewResult };
+    } catch (error) {
+      // Preserve machine-readable asset and workspace safety errors instead
+      // of relabeling them as browser failures.
+      if (
+        error instanceof PreviewRenderError ||
+        error instanceof AssetResolutionError ||
+        error instanceof ProjectPreviewError ||
+        error instanceof WorkspaceSafetyError
+      ) {
+        throw error;
+      }
+      throw new PreviewRenderError(
+        "PREVIEW_SCREENSHOT_FAILED",
+        "Playwright could not render the Resolved Deck preview",
+        { message: error instanceof Error ? error.message : String(error) },
+      );
+    } finally {
+      await browserContext?.close();
+      await browser.close();
+    }
+  }
+}
+
+export function renderPreview(
+  deck: ResolvedDeck,
+  context: PreviewRendererContext,
+): Promise<PreviewRenderResult> {
+  return new PreviewRenderer(context).render(deck);
+}

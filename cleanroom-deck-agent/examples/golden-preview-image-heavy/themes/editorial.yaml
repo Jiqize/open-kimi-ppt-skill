@@ -1,0 +1,20 @@
+name: editorial-dark
+colors:
+  background: "#0E1420"
+  surface: "#182234"
+  foreground: "#F8FAFC"
+  muted: "#B8C2D1"
+  accent: "#F8B84E"
+  border: "#334155"
+fonts:
+  heading:
+    family: Arial
+    weight: 700
+  body:
+    family: Arial
+    weight: 400
+spacing:
+  pageMargin: 0.55
+  grid: 0.25
+radius:
+  card: 0.1

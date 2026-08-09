@@ -1,0 +1,10 @@
+version: 1
+id: golden-preview-image-heavy
+title: Image Heavy Preview
+size:
+  width: 10
+  height: 5.625
+theme: themes/editorial.yaml
+pages:
+  - pages/01-hero.yaml
+  - pages/02-gallery.yaml

@@ -1,0 +1,46 @@
+id: image-hero
+type: hero
+layout:
+  type: full-image
+  options:
+    margin: 0.7
+    gap: 0.15
+    titleHeight: 0.9
+    bodyHeight: 0.55
+background:
+  color: background
+elements:
+  - id: hero
+    type: image
+    slot: hero
+    source: ../media/landscape.svg
+    fit: cover
+    crop: { x: 0.08, y: 0.05, w: 0.84, h: 0.9 }
+    alt: Abstract landscape
+  - id: caption-panel
+    type: shape
+    x: 0.45
+    y: 3.55
+    w: 9.1
+    h: 1.65
+    shape:
+      kind: rectangle
+      fill: surface
+      stroke: border
+      radius: card
+  - id: title
+    type: text
+    slot: title
+    text:
+      value: Systems in Motion
+      style: heading
+      fontSize: 30
+      color: foreground
+  - id: body
+    type: text
+    slot: body
+    text:
+      value: An image-led narrative rendered from the same resolved geometry as PowerPoint.
+      style: body
+      fontSize: 15
+      color: muted

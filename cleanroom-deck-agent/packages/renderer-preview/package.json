@@ -8,6 +8,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "dependencies": {
+    "@deck-agent/deck-core": "workspace:*",
+    "@deck-agent/deck-layout": "workspace:*",
+    "playwright": "1.62.1"
+  },
+  "devDependencies": {
+    "@deck-agent/renderer-pptx": "workspace:*"
   }
 }
-

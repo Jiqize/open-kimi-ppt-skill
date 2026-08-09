@@ -1,0 +1,52 @@
+id: report-cover
+type: cover
+layout:
+  type: cover
+  options:
+    margin: 0.8
+    gap: 0.25
+    titleHeight: 1.1
+    bodyHeight: 0.8
+background:
+  color: background
+elements:
+  - id: accent-panel
+    type: shape
+    x: 0.55
+    y: 0.55
+    w: 8.9
+    h: 4.525
+    shape:
+      kind: rectangle
+      fill: surface
+      stroke: highlight
+      radius: card
+  - id: title
+    type: text
+    slot: title
+    text:
+      value: FY26 Growth Review
+      style: heading
+      fontSize: 34
+      color: foreground
+      alignment: center
+  - id: body
+    type: text
+    slot: body
+    text:
+      value: Durable revenue growth, disciplined execution, and the next operating priorities
+      style: body
+      fontSize: 17
+      color: muted
+      alignment: center
+  - id: baseline
+    type: line
+    x: 3.4
+    y: 4.3
+    w: 3.2
+    h: 0.1
+    line:
+      start: { x: 0, y: 0.5 }
+      end: { x: 1, y: 0.5 }
+      stroke: accent
+      width: 3

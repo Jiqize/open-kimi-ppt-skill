@@ -1,0 +1,52 @@
+id: image-gallery
+type: gallery
+layout:
+  type: split
+  options:
+    ratio: 0.5
+    margin: 0.55
+    gap: 0.3
+    titleHeight: 0.55
+background:
+  color: background
+elements:
+  - id: left-title
+    type: text
+    slot: left.title
+    text:
+      value: Portrait / contain
+      style: heading
+      fontSize: 17
+      color: foreground
+  - id: left-hero
+    type: image
+    slot: left.hero
+    source: ../media/portrait.svg
+    fit: contain
+    alt: Portrait abstract artwork
+  - id: right-title
+    type: text
+    slot: right.title
+    text:
+      value: Square / cover
+      style: heading
+      fontSize: 17
+      color: foreground
+  - id: right-hero
+    type: image
+    slot: right.hero
+    source: ../media/square.svg
+    fit: cover
+    alt: Square abstract artwork
+  - id: connector
+    type: line
+    x: 4.7
+    y: 2.75
+    w: 0.6
+    h: 0.1
+    line:
+      start: { x: 0, y: 0.5 }
+      end: { x: 1, y: 0.5 }
+      stroke: accent
+      width: 2
+      arrow: end

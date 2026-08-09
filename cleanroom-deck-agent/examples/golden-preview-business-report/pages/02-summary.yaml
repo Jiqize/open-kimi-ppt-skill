@@ -1,0 +1,76 @@
+id: report-summary
+type: insight
+layout:
+  type: two-column
+  options:
+    margin: 0.65
+    gap: 0.35
+    titleHeight: 0.75
+    columnTitleHeight: 0.55
+background:
+  color: background
+elements:
+  - id: title
+    type: text
+    slot: title
+    text:
+      value: Growth is broadening across the portfolio
+      style: heading
+      fontSize: 25
+      color: foreground
+  - id: left-card
+    type: shape
+    x: 0.55
+    y: 1.55
+    w: 4.25
+    h: 3.5
+    shape:
+      kind: rectangle
+      fill: surface
+      stroke: highlight
+      radius: card
+  - id: left-title
+    type: text
+    slot: left.title
+    text:
+      value: 28% YoY
+      style: heading
+      fontSize: 25
+      color: accent
+  - id: left-body
+    type: text
+    slot: left.body
+    text:
+      value: Enterprise expansion contributed 61% of net-new ARR while retention remained above plan.
+      style: body
+      fontSize: 16
+      color: foreground
+      wrap:
+        maxLines: 5
+        overflow: ellipsis
+  - id: right-title
+    type: text
+    slot: right.title
+    text:
+      value: Regional mix
+      style: heading
+      fontSize: 19
+      color: foreground
+  - id: right-hero
+    type: image
+    slot: right.hero
+    source: ../media/regional-mix.svg
+    fit: contain
+    alt: Regional mix abstract chart
+  - id: trajectory
+    type: line
+    x: 5.4
+    y: 4.75
+    w: 3.8
+    h: 0.25
+    line:
+      start: { x: 0, y: 1 }
+      end: { x: 1, y: 0 }
+      stroke: accent
+      width: 2
+      arrow: end
