@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc --build",
+    "deck": "node --enable-source-maps apps/cli/dist/index.js",
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
@@ -17,4 +18,3 @@
     "vitest": "4.1.10"
   }
 }
-

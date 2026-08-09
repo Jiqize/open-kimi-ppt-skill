@@ -18,7 +18,17 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@22.20.1)(vite@8.2.1(@types/node@22.20.1)(yaml@2.9.0))
 
-  apps/cli: {}
+  apps/cli:
+    dependencies:
+      '@deck-agent/deck-core':
+        specifier: workspace:*
+        version: link:../../packages/deck-core
+      '@deck-agent/deck-layout':
+        specifier: workspace:*
+        version: link:../../packages/deck-layout
+      '@deck-agent/renderer-pptx':
+        specifier: workspace:*
+        version: link:../../packages/renderer-pptx
 
   packages/deck-core:
     dependencies:
