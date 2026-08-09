@@ -1,2 +1,2 @@
-export const packageName = "@deck-agent/deck-core";
+export * from "./project-loader.js";
 

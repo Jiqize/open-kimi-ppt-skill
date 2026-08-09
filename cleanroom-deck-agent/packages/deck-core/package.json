@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@deck-agent/deck-schema": "workspace:*",
+    "yaml": "2.9.0"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -10,4 +14,3 @@
     }
   }
 }
-
