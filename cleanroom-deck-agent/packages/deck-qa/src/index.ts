@@ -1,2 +1,2 @@
-export const packageName = "@deck-agent/deck-qa";
-
+export * from "./qa-deck.js";
+export * from "./types.js";

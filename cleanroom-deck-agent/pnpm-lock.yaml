@@ -41,7 +41,14 @@ importers:
         specifier: workspace:*
         version: link:../deck-schema
 
-  packages/deck-qa: {}
+  packages/deck-qa:
+    dependencies:
+      '@deck-agent/deck-core':
+        specifier: workspace:*
+        version: link:../deck-core
+      '@deck-agent/deck-layout':
+        specifier: workspace:*
+        version: link:../deck-layout
 
   packages/deck-schema:
     dependencies:
