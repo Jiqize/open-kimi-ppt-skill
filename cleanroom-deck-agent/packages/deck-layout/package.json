@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@deck-agent/deck-core": "workspace:*",
+    "@deck-agent/deck-schema": "workspace:*"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -10,4 +14,3 @@
     }
   }
 }
-

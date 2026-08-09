@@ -5,6 +5,9 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../deck-schema" },
+    { "path": "../deck-core" }
+  ]
 }
-

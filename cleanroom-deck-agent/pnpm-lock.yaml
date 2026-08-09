@@ -29,7 +29,14 @@ importers:
         specifier: 2.9.0
         version: 2.9.0
 
-  packages/deck-layout: {}
+  packages/deck-layout:
+    dependencies:
+      '@deck-agent/deck-core':
+        specifier: workspace:*
+        version: link:../deck-core
+      '@deck-agent/deck-schema':
+        specifier: workspace:*
+        version: link:../deck-schema
 
   packages/deck-qa: {}
 

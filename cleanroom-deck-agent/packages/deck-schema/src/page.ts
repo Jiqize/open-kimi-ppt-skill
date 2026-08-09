@@ -6,7 +6,8 @@ import { semanticTokenNameSchema } from "./theme.js";
 export const pageLayoutSchema = z
   .object({
     type: z.string().min(1),
-    ratio: z.number().positive().max(1).optional(),
+    ratio: z.number().finite().optional(),
+    options: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 
@@ -29,4 +30,3 @@ export const deckPageSchema = z
 export type PageLayout = z.infer<typeof pageLayoutSchema>;
 export type PageBackground = z.infer<typeof pageBackgroundSchema>;
 export type DeckPage = z.infer<typeof deckPageSchema>;
-
