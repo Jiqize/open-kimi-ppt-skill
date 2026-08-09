@@ -1,4 +1,13 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -162,5 +171,130 @@ describe("loadDeckProject", () => {
     await loadDeckProject(projectRoot);
 
     expect(await snapshotFiles(projectRoot)).toEqual(before);
+  });
+
+  it("blocks page paths that escape the project root", async () => {
+    const projectRoot = await createTemporaryProject();
+    const outsideRoot = await createTemporaryProject();
+    const outsidePage = path.join(outsideRoot, "outside-page.yaml");
+    await writeFile(path.join(projectRoot, ".deck-project"), "", "utf8");
+    await writeYaml(outsideRoot, "outside-page.yaml", {
+      id: "outside-page",
+      type: "cover",
+      layout: { type: "cover" },
+      elements: [],
+    });
+    await writeYaml(projectRoot, "deck.yaml", {
+      version: 1,
+      id: "unsafe-page",
+      title: "Unsafe Page",
+      size: { width: 13.333, height: 7.5 },
+      pages: [path.relative(projectRoot, outsidePage)],
+    });
+
+    await expect(loadDeckProject(projectRoot)).rejects.toMatchObject({
+      code: "PAGE_PATH_UNSAFE",
+      filePath: path.relative(projectRoot, outsidePage),
+    });
+  });
+
+  it("blocks a theme path that escapes through a symlink", async () => {
+    const projectRoot = await createValidProject();
+    const outsideRoot = await createTemporaryProject();
+    const outsideTheme = path.join(outsideRoot, "theme.yaml");
+    const projectTheme = path.join(
+      projectRoot,
+      "themes",
+      "executive-light.yaml",
+    );
+    await writeYaml(outsideRoot, "theme.yaml", {
+      name: "outside",
+      colors: {},
+      fonts: {},
+      spacing: {},
+      radius: {},
+    });
+    await unlink(projectTheme);
+    await symlink(outsideTheme, projectTheme, "file");
+
+    await expect(loadDeckProject(projectRoot)).rejects.toMatchObject({
+      code: "THEME_PATH_UNSAFE",
+      filePath: "themes/executive-light.yaml",
+    });
+  });
+
+  it("blocks local media traversal and symlink escapes", async () => {
+    const projectRoot = await createValidProject();
+    const outsideRoot = await createTemporaryProject();
+    const outsideMedia = path.join(outsideRoot, "hero.jpg");
+    await writeFile(outsideMedia, "outside", "utf8");
+    await writeYaml(projectRoot, "pages/02-second.yaml", {
+      id: "page-02",
+      type: "insight",
+      layout: { type: "title-body" },
+      elements: [
+        {
+          id: "hero",
+          type: "image",
+          source: path.relative(path.join(projectRoot, "pages"), outsideMedia),
+        },
+      ],
+    });
+
+    await expect(loadDeckProject(projectRoot)).rejects.toMatchObject({
+      code: "MEDIA_PATH_UNSAFE",
+      filePath: path.relative(path.join(projectRoot, "pages"), outsideMedia),
+    });
+
+    await mkdir(path.join(projectRoot, "media"));
+    await symlink(
+      outsideRoot,
+      path.join(projectRoot, "media", "outside-link"),
+      "dir",
+    );
+    await writeYaml(projectRoot, "pages/02-second.yaml", {
+      id: "page-02",
+      type: "insight",
+      layout: { type: "title-body" },
+      elements: [
+        {
+          id: "hero",
+          type: "image",
+          source: "../media/outside-link/hero.jpg",
+        },
+      ],
+    });
+
+    await expect(loadDeckProject(projectRoot)).rejects.toMatchObject({
+      code: "MEDIA_PATH_UNSAFE",
+      filePath: "../media/outside-link/hero.jpg",
+    });
+  });
+
+  it("allows contained page-relative media and leaves remote URLs to providers", async () => {
+    const projectRoot = await createValidProject();
+    await mkdir(path.join(projectRoot, "media"));
+    await writeFile(path.join(projectRoot, "media", "hero.jpg"), "image", "utf8");
+    await writeYaml(projectRoot, "pages/02-second.yaml", {
+      id: "page-02",
+      type: "insight",
+      layout: { type: "title-body" },
+      elements: [
+        {
+          id: "local-hero",
+          type: "image",
+          source: "../media/hero.jpg",
+        },
+        {
+          id: "remote-hero",
+          type: "image",
+          source: "https://assets.example.com/hero.jpg",
+        },
+      ],
+    });
+
+    const project = await loadDeckProject(projectRoot);
+
+    expect(project.pages[0]?.elements).toHaveLength(2);
   });
 });

@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   deckManifestSchema,
@@ -11,18 +12,27 @@ import {
 } from "@deck-agent/deck-schema";
 import { parse as parseYaml } from "yaml";
 
+import {
+  resolveProjectReadPath,
+  WorkspaceSafetyError,
+} from "./workspace-safety.js";
+
 export type DeckProjectLoadErrorCode =
   | "PROJECT_MARKER_MISSING"
   | "PROJECT_MARKER_UNREADABLE"
   | "MANIFEST_MISSING"
   | "MANIFEST_UNREADABLE"
   | "MANIFEST_INVALID"
+  | "MANIFEST_PATH_UNSAFE"
   | "PAGE_MISSING"
   | "PAGE_UNREADABLE"
   | "PAGE_INVALID"
+  | "PAGE_PATH_UNSAFE"
   | "THEME_MISSING"
   | "THEME_UNREADABLE"
-  | "THEME_INVALID";
+  | "THEME_INVALID"
+  | "THEME_PATH_UNSAFE"
+  | "MEDIA_PATH_UNSAFE";
 
 interface DeckProjectLoadErrorOptions {
   path?: string;
@@ -79,6 +89,12 @@ interface ReadYamlOptions {
   invalidCode: DeckProjectLoadErrorCode;
 }
 
+type UnsafeReadPathErrorCode =
+  | "MANIFEST_PATH_UNSAFE"
+  | "PAGE_PATH_UNSAFE"
+  | "THEME_PATH_UNSAFE"
+  | "MEDIA_PATH_UNSAFE";
+
 function isMissingFileError(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -89,6 +105,100 @@ function isMissingFileError(error: unknown): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function resolveLocalReadPath(
+  projectRoot: string,
+  localPath: string,
+  code: UnsafeReadPathErrorCode,
+  kind: string,
+  baseDirectory = projectRoot,
+): string {
+  try {
+    return resolveProjectReadPath(projectRoot, localPath, baseDirectory);
+  } catch (error) {
+    if (error instanceof WorkspaceSafetyError) {
+      throw new DeckProjectLoadError(
+        code,
+        `Unsafe local ${kind} path: ${localPath}`,
+        { path: localPath, issues: [error.toJSON()] },
+      );
+    }
+
+    throw error;
+  }
+}
+
+function localMediaPath(source: string): string | undefined {
+  if (/^[A-Za-z]:[\\/]/u.test(source) || /^\\\\/u.test(source)) {
+    return source;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(source);
+  } catch (error) {
+    return source;
+  }
+
+  if (url.protocol !== "file:") {
+    return undefined;
+  }
+
+  return fileURLToPath(url);
+}
+
+function assertSafePageMediaPaths(
+  projectRoot: string,
+  pagePath: string,
+  absolutePagePath: string,
+  page: DeckPage,
+): void {
+  for (const element of page.elements) {
+    if (element.type !== "image") {
+      continue;
+    }
+
+    let localPath: string | undefined;
+    try {
+      localPath = localMediaPath(element.source);
+    } catch (error) {
+      throw new DeckProjectLoadError(
+        "MEDIA_PATH_UNSAFE",
+        `Invalid local media URL in ${pagePath}: ${element.source}`,
+        {
+          path: element.source,
+          issues: [{ elementId: element.id, message: errorMessage(error) }],
+        },
+      );
+    }
+
+    if (localPath === undefined) {
+      continue;
+    }
+
+    try {
+      resolveLocalReadPath(
+        projectRoot,
+        localPath,
+        "MEDIA_PATH_UNSAFE",
+        "media",
+        path.dirname(absolutePagePath),
+      );
+    } catch (error) {
+      if (error instanceof DeckProjectLoadError) {
+        throw new DeckProjectLoadError(error.code, error.message, {
+          path: element.source,
+          issues: [
+            { pagePath, elementId: element.id },
+            ...(error.issues ?? []),
+          ],
+        });
+      }
+
+      throw error;
+    }
+  }
 }
 
 async function readYaml(
@@ -165,7 +275,13 @@ export async function loadDeckProject(
   const projectRoot = path.resolve(projectPath);
   await assertProjectMarker(projectRoot);
 
-  const manifestSource = await readYaml(path.join(projectRoot, "deck.yaml"), {
+  const manifestPath = resolveLocalReadPath(
+    projectRoot,
+    "deck.yaml",
+    "MANIFEST_PATH_UNSAFE",
+    "manifest",
+  );
+  const manifestSource = await readYaml(manifestPath, {
     displayPath: "deck.yaml",
     missingCode: "MANIFEST_MISSING",
     unreadableCode: "MANIFEST_UNREADABLE",
@@ -185,7 +301,13 @@ export async function loadDeckProject(
   const pages: DeckPage[] = [];
 
   for (const pagePath of manifest.pages) {
-    const pageSource = await readYaml(path.resolve(projectRoot, pagePath), {
+    const absolutePagePath = resolveLocalReadPath(
+      projectRoot,
+      pagePath,
+      "PAGE_PATH_UNSAFE",
+      "page",
+    );
+    const pageSource = await readYaml(absolutePagePath, {
       displayPath: pagePath,
       missingCode: "PAGE_MISSING",
       unreadableCode: "PAGE_UNREADABLE",
@@ -201,6 +323,12 @@ export async function loadDeckProject(
       );
     }
 
+    assertSafePageMediaPaths(
+      projectRoot,
+      pagePath,
+      absolutePagePath,
+      pageResult.data,
+    );
     pages.push(pageResult.data);
   }
 
@@ -208,15 +336,18 @@ export async function loadDeckProject(
     return { root: projectRoot, manifest, pages };
   }
 
-  const themeSource = await readYaml(
-    path.resolve(projectRoot, manifest.theme),
-    {
-      displayPath: manifest.theme,
-      missingCode: "THEME_MISSING",
-      unreadableCode: "THEME_UNREADABLE",
-      invalidCode: "THEME_INVALID",
-    },
+  const absoluteThemePath = resolveLocalReadPath(
+    projectRoot,
+    manifest.theme,
+    "THEME_PATH_UNSAFE",
+    "theme",
   );
+  const themeSource = await readYaml(absoluteThemePath, {
+    displayPath: manifest.theme,
+    missingCode: "THEME_MISSING",
+    unreadableCode: "THEME_UNREADABLE",
+    invalidCode: "THEME_INVALID",
+  });
   const themeResult = deckThemeSchema.safeParse(themeSource);
 
   if (!themeResult.success) {
@@ -229,4 +360,3 @@ export async function loadDeckProject(
 
   return { root: projectRoot, manifest, pages, theme: themeResult.data };
 }
-

@@ -308,6 +308,98 @@ function resolveFromCanonicalRoot(
   return targetPath;
 }
 
+function mapToCanonicalProjectRoot(
+  canonicalProjectRoot: string,
+  logicalProjectRoot: string,
+  absolutePath: string,
+): string {
+  return isWithinOrEqual(logicalProjectRoot, absolutePath)
+    ? path.resolve(
+        canonicalProjectRoot,
+        path.relative(logicalProjectRoot, absolutePath),
+      )
+    : absolutePath;
+}
+
+function resolveReadFromCanonicalRoot(
+  projectRoot: string,
+  logicalProjectRoot: string,
+  inputPath: string,
+  baseDirectory: string,
+): string {
+  if (inputPath.length === 0) {
+    throw new WorkspaceSafetyError(
+      "PATH_OUTSIDE_PROJECT",
+      "An empty local read path is not allowed",
+      inputPath,
+    );
+  }
+
+  const isAmbiguousWindowsDrivePath =
+    process.platform === "win32" &&
+    /^[A-Za-z]:/u.test(inputPath) &&
+    !path.win32.isAbsolute(inputPath);
+
+  if (isForeignWindowsPath(inputPath) || isAmbiguousWindowsDrivePath) {
+    throw new WorkspaceSafetyError(
+      "ABSOLUTE_PATH_OUTSIDE_PROJECT",
+      `Windows drive and UNC paths are not valid for this project: ${inputPath}`,
+      inputPath,
+    );
+  }
+
+  const absoluteBaseDirectory = path.isAbsolute(baseDirectory)
+    ? path.resolve(baseDirectory)
+    : path.resolve(logicalProjectRoot, baseDirectory);
+  const canonicalBaseDirectory = mapToCanonicalProjectRoot(
+    projectRoot,
+    logicalProjectRoot,
+    absoluteBaseDirectory,
+  );
+
+  if (!isWithinOrEqual(projectRoot, canonicalBaseDirectory)) {
+    throw new WorkspaceSafetyError(
+      "PATH_OUTSIDE_PROJECT",
+      `Read base directory is outside the Deck Project: ${baseDirectory}`,
+      baseDirectory,
+    );
+  }
+  assertNoSymlinkEscape(projectRoot, canonicalBaseDirectory);
+
+  const inputIsAbsolute = path.isAbsolute(inputPath);
+  const absoluteTargetPath = inputIsAbsolute
+    ? path.resolve(inputPath)
+    : path.resolve(canonicalBaseDirectory, inputPath);
+  const targetPath = inputIsAbsolute
+    ? mapToCanonicalProjectRoot(
+        projectRoot,
+        logicalProjectRoot,
+        absoluteTargetPath,
+      )
+    : absoluteTargetPath;
+
+  if (!isWithinOrEqual(projectRoot, targetPath)) {
+    throw new WorkspaceSafetyError(
+      inputIsAbsolute
+        ? "ABSOLUTE_PATH_OUTSIDE_PROJECT"
+        : "PATH_OUTSIDE_PROJECT",
+      `Local read path is outside the Deck Project: ${inputPath}`,
+      inputPath,
+    );
+  }
+
+  if (pathsEqual(projectRoot, targetPath)) {
+    throw new WorkspaceSafetyError(
+      "PROJECT_ROOT_TARGET",
+      "The Deck Project root cannot be used as a local file reference",
+      inputPath,
+    );
+  }
+
+  assertNoSymlinkEscape(projectRoot, targetPath);
+  return targetPath;
+}
+
 export function resolveProjectPath(
   projectRoot: string,
   relativePath: string,
@@ -317,6 +409,20 @@ export function resolveProjectPath(
     canonicalProjectRoot(projectRoot),
     logicalProjectRoot,
     relativePath,
+  );
+}
+
+export function resolveProjectReadPath(
+  projectRoot: string,
+  localPath: string,
+  baseDirectory = projectRoot,
+): string {
+  const logicalProjectRoot = path.resolve(projectRoot);
+  return resolveReadFromCanonicalRoot(
+    canonicalProjectRoot(projectRoot),
+    logicalProjectRoot,
+    localPath,
+    baseDirectory,
   );
 }
 
