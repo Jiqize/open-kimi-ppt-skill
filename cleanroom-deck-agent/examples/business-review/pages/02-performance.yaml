@@ -1,0 +1,53 @@
+id: business-performance
+type: performance
+layout:
+  type: two-column
+  options:
+    margin: 0.68
+    gap: 0.38
+    titleHeight: 0.75
+    columnTitleHeight: 0.62
+background:
+  color: background
+elements:
+  - id: title
+    type: text
+    slot: title
+    text:
+      value: Momentum is broadening across the portfolio
+      style: heading
+      fontSize: 28
+      color: foreground
+  - id: growth-title
+    type: text
+    slot: left.title
+    text:
+      value: 28% YoY growth
+      style: heading
+      fontSize: 23
+      color: positive
+  - id: growth-body
+    type: text
+    slot: left.body
+    text:
+      value: Enterprise expansion contributed 61% of net-new ARR while gross retention remained above plan.
+      style: body
+      fontSize: 17
+      color: foreground
+      wrap:
+        maxLines: 6
+        overflow: ellipsis
+  - id: mix-title
+    type: text
+    slot: right.title
+    text:
+      value: Revenue mix
+      style: heading
+      fontSize: 23
+      color: foreground
+  - id: mix-hero
+    type: image
+    slot: right.hero
+    source: ../media/revenue-mix.svg
+    fit: contain
+    alt: Revenue mix by segment

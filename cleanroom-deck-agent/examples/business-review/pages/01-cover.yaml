@@ -1,0 +1,41 @@
+id: business-cover
+type: cover
+layout:
+  type: cover
+  options:
+    margin: 0.85
+    gap: 0.28
+    titleHeight: 1.15
+    bodyHeight: 0.85
+background:
+  color: background
+elements:
+  - id: title
+    type: text
+    slot: title
+    text:
+      value: FY26 Business Review
+      style: heading
+      fontSize: 38
+      color: foreground
+      alignment: center
+  - id: body
+    type: text
+    slot: body
+    text:
+      value: Durable growth, stronger retention, and focused execution
+      style: body
+      fontSize: 20
+      color: muted
+      alignment: center
+  - id: period-marker
+    type: line
+    x: 3.65
+    y: 4.4
+    w: 2.7
+    h: 0.08
+    line:
+      start: { x: 0, y: 0.5 }
+      end: { x: 1, y: 0.5 }
+      stroke: accent
+      width: 3

@@ -1,0 +1,56 @@
+id: launch-experience
+type: product-experience
+layout:
+  type: split
+  options:
+    ratio: 0.42
+    margin: 0.68
+    gap: 0.38
+    titleHeight: 0.65
+background:
+  color: background
+elements:
+  - id: title
+    type: text
+    x: 0.68
+    y: 0.35
+    w: 8.64
+    h: 0.55
+    text:
+      value: From signal to action in one flow
+      style: heading
+      fontSize: 28
+      color: foreground
+  - id: workflow-title
+    type: text
+    slot: left.title
+    text:
+      value: Built for focus
+      style: heading
+      fontSize: 22
+      color: accent
+  - id: workflow-body
+    type: text
+    slot: left.body
+    text:
+      value: Atlas brings research, synthesis, and stakeholder-ready outputs into a single governed workspace.
+      style: body
+      fontSize: 17
+      color: foreground
+      wrap:
+        maxLines: 7
+        overflow: ellipsis
+  - id: product-title
+    type: text
+    slot: right.title
+    text:
+      value: Live workspace
+      style: heading
+      fontSize: 22
+      color: foreground
+  - id: product-hero
+    type: image
+    slot: right.hero
+    source: ../media/atlas-workspace.svg
+    fit: cover
+    alt: Atlas product workspace

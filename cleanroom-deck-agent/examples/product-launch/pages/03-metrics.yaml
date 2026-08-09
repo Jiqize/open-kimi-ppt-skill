@@ -1,0 +1,48 @@
+id: launch-metrics
+type: launch-metrics
+layout:
+  type: metric-grid
+  options:
+    columns: 3
+    rows: 1
+    margin: 0.68
+    gap: 0.32
+    titleHeight: 0.8
+background:
+  color: background
+elements:
+  - id: title
+    type: text
+    slot: title
+    text:
+      value: Designed for measurable adoption
+      style: heading
+      fontSize: 29
+      color: foreground
+  - id: metric-activation
+    type: text
+    slot: metric
+    text:
+      value: 42%\nfaster activation
+      style: heading
+      fontSize: 23
+      color: accent
+      alignment: center
+  - id: metric-cycle
+    type: text
+    slot: metric
+    text:
+      value: 3.2×\nshorter cycles
+      style: heading
+      fontSize: 23
+      color: highlight
+      alignment: center
+  - id: metric-trust
+    type: text
+    slot: metric
+    text:
+      value: 91%\nteam confidence
+      style: heading
+      fontSize: 23
+      color: foreground
+      alignment: center

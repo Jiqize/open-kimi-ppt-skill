@@ -1,0 +1,20 @@
+name: business-review
+colors:
+  background: "#F4F6FA"
+  surface: "#FFFFFF"
+  foreground: "#172033"
+  muted: "#526071"
+  accent: "#3157F6"
+  positive: "#087E5B"
+fonts:
+  heading:
+    family: Arial
+    weight: 700
+  body:
+    family: Arial
+    weight: 400
+spacing:
+  pageMargin: 0.68
+  grid: 0.28
+radius:
+  card: 0.12

@@ -1,0 +1,42 @@
+id: minimal-summary
+type: summary
+layout:
+  type: title-body
+  options:
+    margin: 0.72
+    gap: 0.32
+    titleHeight: 0.9
+background:
+  color: background
+elements:
+  - id: title
+    type: text
+    slot: title
+    text:
+      value: Operations are tracking to plan
+      style: heading
+      fontSize: 30
+      color: foreground
+  - id: body
+    type: text
+    slot: body
+    text:
+      value: Revenue is up 18% year over year, delivery reliability reached 96%, and the next-quarter focus is enterprise expansion.
+      style: body
+      fontSize: 20
+      color: muted
+      wrap:
+        maxLines: 6
+        overflow: ellipsis
+  - id: direction
+    type: line
+    x: 0.72
+    y: 5.05
+    w: 8.56
+    h: 0.08
+    line:
+      start: { x: 0, y: 0.5 }
+      end: { x: 1, y: 0.5 }
+      stroke: accent
+      width: 2
+      arrow: end

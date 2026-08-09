@@ -1,0 +1,18 @@
+name: minimal-report
+colors:
+  background: "#F7F8FA"
+  foreground: "#172033"
+  muted: "#526071"
+  accent: "#3157F6"
+fonts:
+  heading:
+    family: Arial
+    weight: 700
+  body:
+    family: Arial
+    weight: 400
+spacing:
+  pageMargin: 0.72
+  grid: 0.25
+radius:
+  card: 0.12

@@ -1,0 +1,10 @@
+version: 1
+id: business-review
+title: FY26 Business Review
+size:
+  width: 10
+  height: 5.625
+theme: themes/business.yaml
+pages:
+  - pages/01-cover.yaml
+  - pages/02-performance.yaml

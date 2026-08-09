@@ -1,0 +1,11 @@
+version: 1
+id: product-launch
+title: Atlas Product Launch
+size:
+  width: 10
+  height: 5.625
+theme: themes/launch.yaml
+pages:
+  - pages/01-launch.yaml
+  - pages/02-experience.yaml
+  - pages/03-metrics.yaml

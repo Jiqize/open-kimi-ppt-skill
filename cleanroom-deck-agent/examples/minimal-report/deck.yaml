@@ -1,0 +1,9 @@
+version: 1
+id: minimal-report
+title: Minimal Operations Report
+size:
+  width: 10
+  height: 5.625
+theme: themes/report.yaml
+pages:
+  - pages/01-summary.yaml
